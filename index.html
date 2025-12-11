@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kdo je Impostor? - SpyGame</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        .reveal-anim { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .loader {
+            border-top-color: #ef4444;
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .chat-bubble {
+            position: relative;
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 20px;
+            margin-bottom: 10px;
+            word-wrap: break-word;
+        }
+        .chat-self {
+            background-color: #3b82f6;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+        .chat-other {
+            background-color: #374151;
+            color: #e5e7eb;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+        }
+
+        /* Siren Animation for Emergency */
+        @keyframes emergency-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            50% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+        }
+        .emergency-btn {
+            animation: emergency-pulse 2s infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+
+    <div id="app" class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-md text-center border-4 border-gray-700 relative overflow-hidden flex flex-col h-[90vh]">
+        
+        <!-- Loading overlay -->
+        <div id="loadingOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-95 flex flex-col items-center justify-center z-50 rounded-xl">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
+            <p id="loadingText" class="text-gray-300 font-semibold">Načítám...</p>
+        </div>
+
+        <!-- 1. Menu -->
+        <div id="menuView" class="hidden flex-col justify-center h-full space-y-4 relative">
+            <div class="mb-6">
+                <h1 class="text-5xl font-black text-red-600 tracking-tighter">SPYGAME</h1>
+                <p class="text-gray-400 text-sm tracking-widest uppercase">Kdo je Impostor?</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-left text-gray-400 text-xs font-bold mb-1 ml-1">PŘEZDÍVKA</label>
+                    <input type="text" id="playerNameInput" placeholder="Např. Bond" class="w-full p-4 rounded-xl bg-gray-700 border-2 border-gray-600 focus:border-red-500 focus:outline-none text-center text-lg font-bold text-white transition-colors">
+                </div>
+                
+                <div class="bg-gray-700 p-4 rounded-xl border border-gray-600">
+                    <label class="block text-left text-gray-400 text-xs font-bold mb-2 ml-1 uppercase">Vyber sadu karet</label>
+                    <select id="cardSetSelect" class="w-full p-3 rounded-lg bg-gray-800 border border-gray-500 text-white focus:outline-none focus:border-red-500">
+                        <option value="" disabled selected>Načítám sety...</option>
+                    </select>
+                </div>
+
+                <button id="btnCreateGame" class="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 py-4 rounded-xl font-bold text-xl shadow-lg transition transform hover:scale-[1.02] active:scale-95">
+                    Vytvořit novou hru
+                </button>
+                
+                <div class="relative flex py-2 items-center">
+                    <div class="flex-grow border-t border-gray-600"></div>
+                    <span class="flex-shrink-0 mx-4 text-gray-500 text-xs uppercase">nebo</span>
+                    <div class="flex-grow border-t border-gray-600"></div>
+                </div>
+
+                <div class="flex space-x-2">
+                    <input type="text" id="gameCodeInput" placeholder="KÓD" class="w-1/3 p-3 rounded-xl bg-gray-700 border-2 border-gray-600 focus:border-blue-500 focus:outline-none text-center text-lg font-mono uppercase tracking-widest text-white transition-colors">
+                    <button id="btnJoinGame" class="flex-1 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold shadow-lg transition">
+                        Vstoupit
+                    </button>
+                </div>
+            </div>
+
+            <!-- Admin Button pro nahrání setů -->
+            <button id="btnAdminUpload" class="absolute bottom-0 left-0 text-gray-700 text-xs hover:text-gray-500 p-2">
+                🛠 Admin: Nahrát defaultní sety
+            </button>
+        </div>
+
+        <!-- 2. Lobby -->
+        <div id="lobbyView" class="hidden flex-col h-full">
+            <div class="bg-gray-900 rounded-xl p-4 mb-4 border border-gray-600 shrink-0">
+                <span class="text-gray-500 text-xs uppercase font-bold block mb-1">Kód místnosti</span>
+                <div id="displayGameCode" class="text-4xl font-mono font-black tracking-widest text-red-500 select-all cursor-pointer">????</div>
+                <div id="selectedSetName" class="text-xs text-blue-400 mt-2 font-bold uppercase tracking-wider">...</div>
+            </div>
+
+            <div class="flex justify-between items-end mb-2 px-1 shrink-0">
+                <h3 class="text-lg font-bold text-white">Hráči</h3>
+                <span id="playerCountBadge" class="text-xs bg-gray-700 px-2 py-1 rounded text-gray-300">0</span>
+            </div>
+            
+            <ul id="playersList" class="bg-gray-700 rounded-xl p-2 space-y-2 mb-4 flex-grow overflow-y-auto text-left shadow-inner"></ul>
+
+            <div id="hostControls" class="hidden shrink-0 mt-auto">
+                <button id="btnStartGame" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-xl font-bold text-xl shadow-lg animate-pulse transition">
+                    SPUSTIT MISI
+                </button>
+                <p class="text-xs text-gray-500 mt-3">Jako zakladatel ovládáš start hry.</p>
+            </div>
+            <div id="waitingForHost" class="hidden shrink-0 mt-auto py-4 text-gray-400">
+                <p class="text-sm italic animate-pulse">Čekáme na start...</p>
+            </div>
+        </div>
+
+        <!-- 3. Reveal Role -->
+        <div id="gameView" class="hidden flex-col h-full justify-center">
+            <h2 class="text-xl font-bold mb-2 text-gray-400 uppercase tracking-widest">Tajný Spis</h2>
+            <p class="text-xs text-gray-500 mb-6">Nikomu neukazuj svůj displej!</p>
+
+            <button id="btnReveal" class="w-full aspect-[3/4] max-h-[60vh] bg-gray-700 hover:bg-gray-600 rounded-2xl border-4 border-dashed border-gray-500 flex flex-col items-center justify-center transition-all group overflow-hidden relative shadow-2xl mx-auto">
+                <div class="mb-4 text-5xl opacity-50 group-hover:opacity-100 transition">🕵️‍♂️</div>
+                <span class="text-xl font-bold text-gray-300 group-hover:text-white transition uppercase tracking-wider">Dotkni se<br>pro odhalení</span>
+            </button>
+
+            <!-- Obsah po odhalení -->
+            <div id="roleContent" class="hidden w-full aspect-[3/4] max-h-[60vh] reveal-anim bg-gray-800 rounded-2xl border-2 border-gray-600 relative overflow-hidden flex flex-col mx-auto">
+                <div id="impostorContent" class="hidden flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-gray-800 to-red-900/20">
+                    <h1 class="text-4xl font-black text-red-500 mb-2 uppercase tracking-tighter">IMPOSTOR</h1>
+                    <div class="text-6xl mb-6">🤫</div>
+                    <p class="text-lg font-bold text-white mb-2">Tvá identita je tajná</p>
+                    <p class="text-sm text-gray-400 leading-relaxed">Neznáš tajné slovo. Poslouchej ostatní a splyň s davem.</p>
+                </div>
+
+                <div id="crewmateContent" class="hidden flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-gray-800 to-green-900/20">
+                    <h1 class="text-3xl font-black text-green-500 mb-4 uppercase tracking-tighter">AGENT</h1>
+                    <div class="bg-gray-900/80 p-4 rounded-2xl border border-gray-600 shadow-xl w-full">
+                        <p class="text-xs text-gray-500 uppercase font-bold mb-2 tracking-wider">Tajný cíl:</p>
+                        <div class="relative w-24 h-24 mx-auto mb-2">
+                            <img id="secretImage" src="" alt="Tajný předmět" class="w-full h-full rounded-full object-cover border-4 border-green-500 bg-gray-700">
+                        </div>
+                        <p id="secretName" class="text-xl font-black text-white tracking-wide"></p>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-gray-900/50 mt-auto">
+                    <button id="btnConfirmRole" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold text-white">
+                        Mám to, pokračovat
+                    </button>
+                </div>
+            </div>
+
+            <div id="waitingForOthers" class="hidden flex-col items-center justify-center h-full">
+                <div class="loader rounded-full border-4 border-t-4 border-gray-500 h-16 w-16 mb-6"></div>
+                <h3 class="text-2xl font-bold mb-2">Čekáme na ostatní</h3>
+                <div id="readyCount" class="mt-4 text-xl font-mono text-blue-400">0 / 0</div>
+            </div>
+        </div>
+
+        <!-- 4. Diskuze -->
+        <div id="discussionView" class="hidden flex-col h-full">
+            <div class="shrink-0 flex justify-between items-center mb-2 border-b border-gray-700 pb-2">
+                <div>
+                    <span class="text-xs text-gray-500 uppercase font-bold">Kolo</span>
+                    <span id="roundIndicator" class="text-xl font-bold text-white ml-1">1/3</span>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-gray-500 uppercase font-bold">Na tahu</p>
+                    <p id="currentTurnPlayer" class="text-yellow-400 font-bold truncate max-w-[150px]">...</p>
+                </div>
+            </div>
+
+            <div id="chatContainer" class="flex-grow bg-gray-900 rounded-xl p-4 overflow-y-auto flex flex-col mb-4 border border-gray-700 relative">
+                <!-- Zprávy -->
+            </div>
+            
+            <!-- EMERGENCY MEETING BUTTON -->
+            <button id="btnEmergency" class="w-full bg-red-600/20 border-2 border-red-600 hover:bg-red-600 text-red-500 hover:text-white font-black py-3 rounded-xl mb-4 transition-all flex items-center justify-center gap-2 group">
+                <span class="text-2xl animate-pulse">🚨</span>
+                <div class="flex flex-col items-start">
+                    <span class="uppercase tracking-widest text-sm">Emergency Meeting</span>
+                    <span id="emergencyCount" class="text-xs font-normal opacity-80 group-hover:text-white">0/0 hlasů pro zastavení</span>
+                </div>
+            </button>
+
+            <div id="inputArea" class="shrink-0">
+                <div id="notMyTurnMsg" class="text-center text-gray-500 text-sm py-3 bg-gray-800 rounded-lg italic">
+                    Čekej na svůj tah...
+                </div>
+                <form id="chatForm" class="hidden flex gap-2">
+                    <input type="text" id="chatInput" maxlength="50" placeholder="Max 3 slova..." class="flex-1 p-3 rounded-lg bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none text-white">
+                    <button type="submit" class="bg-blue-600 px-4 rounded-lg font-bold hover:bg-blue-500">➤</button>
+                </form>
+                <p id="wordCountError" class="text-red-500 text-xs mt-1 hidden">Maximálně 3 slova!</p>
+            </div>
+        </div>
+
+        <!-- 5. Hlasování -->
+        <div id="votingView" class="hidden flex-col h-full pt-4">
+            <h2 class="text-3xl font-black text-red-500 mb-2 uppercase">Kdo je Spy?</h2>
+            <div id="votingList" class="flex-grow overflow-y-auto space-y-3 px-2"></div>
+            <div id="voteStatus" class="mt-4 text-gray-400 text-sm animate-pulse">Čekáme na hlasy...</div>
+        </div>
+
+        <!-- 6. Výsledky -->
+        <div id="resultsView" class="hidden flex-col h-full justify-center items-center">
+            <h1 id="winTitle" class="text-5xl font-black mb-4 uppercase tracking-tighter">???</h1>
+            <div class="bg-gray-800 p-6 rounded-2xl border-4 border-gray-600 w-full mb-6">
+                <p class="text-gray-500 uppercase text-xs font-bold mb-2">Impostor byl</p>
+                <div class="flex items-center justify-center gap-3 mb-6">
+                    <div class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-2xl">🤫</div>
+                    <span id="revealImpostorName" class="text-3xl font-bold text-white"></span>
+                </div>
+                <div class="border-t border-gray-700 pt-4">
+                    <p class="text-gray-500 uppercase text-xs font-bold mb-2">Tajné slovo</p>
+                    <p id="revealSecretWord" class="text-2xl font-bold text-green-400"></p>
+                </div>
+            </div>
+            <button id="btnBackToLobbyFinal" class="w-full bg-gray-600 hover:bg-gray-500 py-4 rounded-xl font-bold text-white shadow-lg">Zpět do Lobby</button>
+        </div>
+
+    </div>
+
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, arrayUnion, getDoc, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- KONFIGURACE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyArCoQVExlvIhzU6Hc8ffiwbNL55VWHi34",
+            authDomain: "spygame-87b8b.firebaseapp.com",
+            projectId: "spygame-87b8b",
+            storageBucket: "spygame-87b8b.firebasestorage.app",
+            messagingSenderId: "151689614342",
+            appId: "1:151689614342:web:d561337f3083efaf0e9f87",
+            measurementId: "G-ZWD05TCV8Q"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'spygame-87b8b'; 
+        
+        let currentUser = null;
+        let currentGameId = null;
+        let unsubscribeGame = null;
+
+        const SILHOUETTE_URL = "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png";
+
+        // UI Helpers
+        const views = {
+            loading: document.getElementById('loadingOverlay'),
+            menu: document.getElementById('menuView'),
+            lobby: document.getElementById('lobbyView'),
+            game: document.getElementById('gameView'),
+            discussion: document.getElementById('discussionView'),
+            voting: document.getElementById('votingView'),
+            results: document.getElementById('resultsView')
+        };
+        const inputs = {
+            name: document.getElementById('playerNameInput'),
+            code: document.getElementById('gameCodeInput'),
+            cardSet: document.getElementById('cardSetSelect')
+        };
+
+        // --- AUTH & INIT ---
+        async function initAuth() {
+            try { await signInAnonymously(auth); } 
+            catch (error) { console.error("Auth:", error); }
+        }
+        initAuth();
+        
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                loadCardSets(); // Načíst sety při startu
+                setTimeout(() => {
+                    views.loading.classList.add('hidden');
+                    views.menu.classList.remove('hidden');
+                }, 500);
+            }
+        });
+
+        function showView(viewName) {
+            Object.values(views).forEach(el => el.classList.add('hidden'));
+            views[viewName].classList.remove('hidden');
+        }
+
+        // --- SETS MANAGEMENT ---
+
+        // 1. Načtení setů do select boxu
+        async function loadCardSets() {
+            const select = inputs.cardSet;
+            select.innerHTML = '<option value="" disabled selected>Načítám sety...</option>';
+            
+            try {
+                // Cesta: artifacts/spygame-87b8b/public/data/cardSets
+                const setsRef = collection(db, 'artifacts', appId, 'public', 'data', 'cardSets');
+                const snapshot = await getDocs(setsRef);
+                
+                select.innerHTML = '';
+                if (snapshot.empty) {
+                    select.innerHTML = '<option disabled>Žádné sety. Použij Admin tlačítko.</option>';
+                } else {
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        const opt = document.createElement('option');
+                        opt.value = doc.id;
+                        opt.textContent = data.title;
+                        select.appendChild(opt);
+                    });
+                    // Vyber první automaticky
+                    select.selectedIndex = 0;
+                }
+            } catch (e) {
+                console.error("Chyba načítání setů:", e);
+                select.innerHTML = '<option disabled>Chyba načítání</option>';
+            }
+        }
+
+        // 2. ADMIN: Nahrání defaultního setu
+        document.getElementById('btnAdminUpload').onclick = async () => {
+            if(!confirm("Chceš nahrát defaultní set 'Jména' do databáze?")) return;
+            
+            const namesList = [
+                "Martin", "Kuba", "Honzík", "Laso", "Vojta", "Stuchlík", "Vláďa", 
+                "David Volf", "Viktor", "Matěj", "Tonda", "Horák", "Matúš", "JJ", 
+                "Daniel", "Checa", "Kostner", "Rami", "Čermi", "Patrik", "Kuba Holý", 
+                "Jáchym", "Carlos", "Petr", "Hynek", "Jahoda", "Sirovátka", 
+                "Semerád", "Strom", "Mikuláš Vlk"
+            ];
+            
+            // Převod na objekty {name, image}
+            const items = namesList.map(n => ({
+                name: n,
+                image: SILHOUETTE_URL
+            }));
+
+            try {
+                const setsRef = collection(db, 'artifacts', appId, 'public', 'data', 'cardSets');
+                await addDoc(setsRef, {
+                    title: "Jména (Kolektiv)",
+                    items: items,
+                    createdAt: new Date().toISOString()
+                });
+                alert("Sety nahrány! Obnov stránku.");
+                location.reload();
+            } catch (e) {
+                alert("Chyba: " + e.message);
+            }
+        };
+
+
+        // --- GAME LOGIC ---
+
+        function generateGameCode() {
+            const chars = "ABCDEFGHJKMNPQRSTUVWXYZ123456789";
+            let result = '';
+            for(let i=0; i<4; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+            return result;
+        }
+
+        // CREATE GAME
+        document.getElementById('btnCreateGame').addEventListener('click', async () => {
+            if (!currentUser) return;
+            const name = inputs.name.value.trim();
+            const setId = inputs.cardSet.value;
+            
+            if (!name) return alert("Zadej jméno!");
+            if (!setId) return alert("Musíš vybrat sadu karet! (Pokud žádná není, použij Admin tlačítko)");
+
+            // Načíst název setu pro UI
+            const setName = inputs.cardSet.options[inputs.cardSet.selectedIndex].text;
+
+            const gameId = generateGameCode();
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', gameId);
+
+            views.menu.classList.add('hidden');
+            views.loading.classList.remove('hidden');
+
+            try {
+                await setDoc(gameRef, {
+                    hostId: currentUser.uid,
+                    status: 'LOBBY',
+                    cardSetId: setId,
+                    cardSetName: setName,
+                    createdAt: new Date().toISOString(),
+                    players: [{ uid: currentUser.uid, name: name, isHost: true }],
+                    readyPlayers: [], 
+                    turnOrder: [],
+                    chatMessages: [], 
+                    currentTurnIndex: 0,
+                    votes: {},
+                    emergencyVotes: [] // Pole UID lidí, co zmáčkli tlačítko
+                });
+                joinLobby(gameId, name);
+            } catch (e) {
+                console.error(e);
+                views.loading.classList.add('hidden');
+                views.menu.classList.remove('hidden');
+            }
+        });
+
+        // JOIN GAME
+        document.getElementById('btnJoinGame').addEventListener('click', async () => {
+            if (!currentUser) return;
+            const name = inputs.name.value.trim();
+            const code = inputs.code.value.trim().toUpperCase();
+            if (!name || code.length !== 4) return alert("Zkontroluj údaje!");
+
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', code);
+            views.menu.classList.add('hidden');
+            views.loading.classList.remove('hidden');
+
+            try {
+                const snap = await getDoc(gameRef);
+                if (!snap.exists()) throw new Error("Místnost neexistuje");
+                
+                const data = snap.data();
+                const playerExists = data.players.find(p => p.uid === currentUser.uid);
+
+                if (data.status !== 'LOBBY' && !playerExists) {
+                    throw new Error("Hra už běží!");
+                }
+
+                if (!playerExists) {
+                    await updateDoc(gameRef, {
+                        players: arrayUnion({ uid: currentUser.uid, name: name, isHost: false })
+                    });
+                }
+                joinLobby(code, name);
+            } catch (e) {
+                alert(e.message);
+                views.loading.classList.add('hidden');
+                views.menu.classList.remove('hidden');
+            }
+        });
+
+        function joinLobby(gameId, playerName) {
+            currentGameId = gameId;
+            document.getElementById('displayGameCode').textContent = gameId;
+            views.loading.classList.add('hidden');
+            showView('lobby');
+
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', gameId);
+            if (unsubscribeGame) unsubscribeGame();
+
+            unsubscribeGame = onSnapshot(gameRef, (snap) => {
+                if (!snap.exists()) { alert("Hra zrušena"); location.reload(); return; }
+                const data = snap.data();
+
+                if (data.cardSetName) {
+                    document.getElementById('selectedSetName').textContent = `SET: ${data.cardSetName}`;
+                }
+
+                // Routing
+                if (data.status === 'LOBBY') renderLobby(data);
+                else if (data.status === 'REVEAL') renderReveal(data);
+                else if (data.status === 'DISCUSSION') renderDiscussion(data);
+                else if (data.status === 'VOTING') renderVoting(data);
+                else if (data.status === 'RESULTS') renderResults(data);
+                
+                if (data.hostId === currentUser.uid) hostLogic(data, gameRef);
+            });
+        }
+
+        // --- RENDERING ---
+
+        function renderLobby(data) {
+            showView('lobby');
+            const list = document.getElementById('playersList');
+            list.innerHTML = '';
+            document.getElementById('playerCountBadge').textContent = data.players.length;
+
+            data.players.forEach(p => {
+                const li = document.createElement('li');
+                li.className = "flex justify-between items-center bg-gray-800 p-2 rounded border border-gray-700";
+                li.innerHTML = `<span class="${p.uid === currentUser.uid ? 'text-blue-400 font-bold' : ''}">${p.name}</span>`;
+                list.appendChild(li);
+            });
+
+            const amIHost = data.hostId === currentUser.uid;
+            document.getElementById('hostControls').classList.toggle('hidden', !amIHost);
+            document.getElementById('waitingForHost').classList.toggle('hidden', amIHost);
+        }
+
+        let hasConfirmedRole = false;
+        function renderReveal(data) {
+            showView('game');
+            if (document.getElementById('roleContent').classList.contains('hidden')) {
+                document.getElementById('btnReveal').classList.remove('hidden');
+                document.getElementById('waitingForOthers').classList.add('hidden');
+            }
+
+            const isImpostor = data.impostorUid === currentUser.uid;
+            if (!isImpostor) {
+                document.getElementById('secretName').textContent = data.secretItem.name;
+                document.getElementById('secretImage').src = data.secretItem.image;
+            }
+
+            document.getElementById('btnReveal').onclick = () => {
+                document.getElementById('btnReveal').classList.add('hidden');
+                document.getElementById('roleContent').classList.remove('hidden');
+                if (isImpostor) document.getElementById('impostorContent').classList.remove('hidden');
+                else document.getElementById('crewmateContent').classList.remove('hidden');
+            };
+
+            document.getElementById('btnConfirmRole').onclick = async () => {
+                if (hasConfirmedRole) return;
+                hasConfirmedRole = true;
+                const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+                await updateDoc(gameRef, { readyPlayers: arrayUnion(currentUser.uid) });
+                document.getElementById('roleContent').classList.add('hidden');
+                document.getElementById('waitingForOthers').classList.remove('hidden');
+            };
+            const readyCount = data.readyPlayers ? data.readyPlayers.length : 0;
+            document.getElementById('readyCount').textContent = `${readyCount} / ${data.players.length}`;
+        }
+
+        function renderDiscussion(data) {
+            showView('discussion');
+            
+            const totalPlayers = data.players.length;
+            const turnIndex = data.currentTurnIndex || 0;
+            const currentRound = Math.floor(turnIndex / totalPlayers) + 1;
+            document.getElementById('roundIndicator').textContent = `${Math.min(currentRound, 3)}/3`;
+
+            // Chat
+            const chatContainer = document.getElementById('chatContainer');
+            chatContainer.innerHTML = '';
+            (data.chatMessages || []).forEach(msg => {
+                const isMe = msg.senderUid === currentUser.uid;
+                const senderName = data.players.find(p => p.uid === msg.senderUid)?.name || "Unknown";
+                const div = document.createElement('div');
+                div.className = `chat-bubble flex flex-col ${isMe ? 'chat-self' : 'chat-other'}`;
+                div.innerHTML = `<span class="text-[10px] opacity-75 mb-1">${senderName}</span><span class="font-bold">${msg.text}</span>`;
+                chatContainer.appendChild(div);
+            });
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            // Turn Logic
+            if (!data.turnOrder) return;
+            const currentUid = data.turnOrder[turnIndex % totalPlayers];
+            const currentPlayer = data.players.find(p => p.uid === currentUid);
+            document.getElementById('currentTurnPlayer').textContent = currentPlayer?.name || "...";
+
+            const isMyTurn = currentUid === currentUser.uid;
+            const form = document.getElementById('chatForm');
+            const notMyTurnMsg = document.getElementById('notMyTurnMsg');
+            
+            if (isMyTurn) {
+                form.classList.remove('hidden');
+                notMyTurnMsg.classList.add('hidden');
+            } else {
+                form.classList.add('hidden');
+                notMyTurnMsg.classList.remove('hidden');
+                notMyTurnMsg.textContent = `Čekáme na: ${currentPlayer?.name}`;
+            }
+
+            // EMERGENCY BUTTON LOGIC
+            const btnEmerg = document.getElementById('btnEmergency');
+            const emergCountEl = document.getElementById('emergencyCount');
+            
+            const votedCount = data.emergencyVotes ? data.emergencyVotes.length : 0;
+            // 3/5 logic (60%)
+            const required = Math.ceil(totalPlayers * 0.6);
+            emergCountEl.textContent = `${votedCount}/${required} hlasů pro zastavení`;
+
+            const haveIVoted = data.emergencyVotes && data.emergencyVotes.includes(currentUser.uid);
+            
+            if (haveIVoted) {
+                btnEmerg.classList.add('bg-red-600', 'text-white');
+                btnEmerg.classList.remove('animate-pulse'); // Stop pulsing if I pressed it
+            } else {
+                btnEmerg.classList.remove('bg-red-600', 'text-white');
+                btnEmerg.classList.add('animate-pulse');
+            }
+
+            btnEmerg.onclick = async () => {
+                if (haveIVoted) return;
+                const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+                await updateDoc(gameRef, {
+                    emergencyVotes: arrayUnion(currentUser.uid)
+                });
+            };
+        }
+
+        function renderVoting(data) {
+            showView('voting');
+            const list = document.getElementById('votingList');
+            list.innerHTML = '';
+            const myVote = data.votes ? data.votes[currentUser.uid] : null;
+            
+            // Pokud jsem zmáčkl emergency, nebo čas vypršel, zobrazí se voting
+            data.players.forEach(p => {
+                if (p.uid === currentUser.uid) return;
+                const btn = document.createElement('button');
+                btn.className = `w-full p-4 rounded-xl font-bold border-2 transition ${myVote === p.uid ? 'bg-red-600 border-red-400 text-white' : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'}`;
+                btn.textContent = p.name;
+                btn.disabled = !!myVote;
+                btn.onclick = async () => {
+                    const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+                    const voteKey = `votes.${currentUser.uid}`;
+                    await updateDoc(gameRef, { [voteKey]: p.uid });
+                };
+                list.appendChild(btn);
+            });
+            const voteCount = data.votes ? Object.keys(data.votes).length : 0;
+            document.getElementById('voteStatus').textContent = myVote ? `Hlas přijat (${voteCount}/${data.players.length})` : "Musíš někoho označit!";
+        }
+
+        function renderResults(data) {
+            showView('results');
+            const impostorName = data.players.find(p => p.uid === data.impostorUid)?.name;
+            document.getElementById('revealImpostorName').textContent = impostorName;
+            document.getElementById('revealSecretWord').textContent = data.secretItem.name;
+            const title = document.getElementById('winTitle');
+            if (data.winner === 'CREWMATES') {
+                title.textContent = "AGENTI VYHRÁLI";
+                title.className = "text-4xl font-black mb-4 uppercase text-green-500";
+            } else {
+                title.textContent = "IMPOSTOR VYHRÁL";
+                title.className = "text-4xl font-black mb-4 uppercase text-red-500";
+            }
+            document.getElementById('btnBackToLobbyFinal').onclick = async () => location.reload();
+        }
+
+        // --- HOST LOGIC ---
+        async function hostLogic(data, gameRef) {
+            // 1. Reveal -> Discussion
+            if (data.status === 'REVEAL' && data.readyPlayers && data.readyPlayers.length === data.players.length) {
+                const order = data.players.map(p => p.uid).sort(() => Math.random() - 0.5);
+                await updateDoc(gameRef, { status: 'DISCUSSION', turnOrder: order, currentTurnIndex: 0 });
+            }
+
+            // 2. Discussion -> Voting (Max turns OR Emergency)
+            if (data.status === 'DISCUSSION') {
+                const maxTurns = data.players.length * 3;
+                const requiredEmergency = Math.ceil(data.players.length * 0.6);
+                const currentEmergency = data.emergencyVotes ? data.emergencyVotes.length : 0;
+
+                if (data.currentTurnIndex >= maxTurns || currentEmergency >= requiredEmergency) {
+                    await updateDoc(gameRef, { status: 'VOTING' });
+                }
+            }
+
+            // 3. Voting -> Results
+            if (data.status === 'VOTING' && data.votes && Object.keys(data.votes).length === data.players.length) {
+                const voteCounts = {};
+                Object.values(data.votes).forEach(uid => voteCounts[uid] = (voteCounts[uid] || 0) + 1);
+                let maxVotes = 0;
+                let suspectUid = null;
+                for (const [uid, count] of Object.entries(voteCounts)) {
+                    if (count > maxVotes) { maxVotes = count; suspectUid = uid; }
+                    else if (count === maxVotes) { suspectUid = null; }
+                }
+                const impostorCaught = suspectUid === data.impostorUid;
+                await updateDoc(gameRef, { status: 'RESULTS', winner: impostorCaught ? 'CREWMATES' : 'IMPOSTOR' });
+            }
+        }
+
+        // START GAME (Creator) - Fetch selected set items
+        document.getElementById('btnStartGame').addEventListener('click', async () => {
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+            const snap = await getDoc(gameRef);
+            const data = snap.data();
+            
+            if (data.players.length < 2) return alert("Minimálně 2 hráči!");
+
+            // NAČÍST POLOŽKY ZE ZVOLENÉHO SETU
+            const setId = data.cardSetId;
+            let itemsToPlay = [];
+
+            try {
+                const setRef = doc(db, 'artifacts', appId, 'public', 'data', 'cardSets', setId);
+                const setSnap = await getDoc(setRef);
+                if (!setSnap.exists()) throw new Error("Set nenalezen");
+                itemsToPlay = setSnap.data().items;
+            } catch(e) {
+                console.error("Chyba setu:", e);
+                // Fallback pro případ chyby (aby hra nespadla)
+                itemsToPlay = [{name: "Chyba databáze", image: SILHOUETTE_URL}];
+            }
+
+            const randomItem = itemsToPlay[Math.floor(Math.random() * itemsToPlay.length)];
+            const randomPlayer = data.players[Math.floor(Math.random() * data.players.length)];
+
+            await updateDoc(gameRef, {
+                status: 'REVEAL',
+                secretItem: { name: randomItem.name, image: randomItem.image },
+                impostorUid: randomPlayer.uid,
+                readyPlayers: [],
+                votes: {},
+                emergencyVotes: []
+            });
+        });
+
+        // CHAT SEND
+        document.getElementById('chatForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            const words = text.split(/\s+/).filter(w => w.length > 0);
+            if (words.length > 3 || words.length === 0) {
+                document.getElementById('wordCountError').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('wordCountError').classList.add('hidden');
+            input.value = '';
+
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+            const snap = await getDoc(gameRef);
+            const idx = snap.data().currentTurnIndex;
+            await updateDoc(gameRef, {
+                chatMessages: arrayUnion({ senderUid: currentUser.uid, text: text, timestamp: Date.now() }),
+                currentTurnIndex: idx + 1
+            });
+        });
+
+    </script>
+</body>
+</html>
