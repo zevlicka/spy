@@ -2,116 +2,297 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SpyGame Admin: Generátor Setů</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kdo je Impostor? - SpyGame</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #111827; }
+        
+        .loader {
+            border: 4px solid #374151;
+            border-top: 4px solid #ef4444;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .chat-bubble {
+            padding: 8px 12px;
+            border-radius: 16px;
+            margin-bottom: 6px;
+            max-width: 85%;
+            word-wrap: break-word;
+            font-size: 0.95rem;
+            line-height: 1.3;
+        }
+        .chat-self { background-color: #2563eb; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .chat-other { background-color: #374151; color: #e5e7eb; align-self: flex-start; border-bottom-left-radius: 4px; }
+
+        .emergency-active { animation: pulse-red 2s infinite; }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
+
+        #secretImage {
+            min-height: 200px;
+            background-color: #1f2937;
+            display: block;
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen p-6 flex flex-col items-center">
+<body class="text-white flex flex-col h-[100dvh] overflow-hidden">
 
-    <div class="max-w-4xl w-full bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700">
-        <h1 class="text-3xl font-bold mb-2 text-blue-500">🛠 Admin: Generátor Setů</h1>
+    <!-- HLAVNÍ KONTEJNER -->
+    <div id="mainContainer" class="flex-1 flex flex-col max-w-md mx-auto w-full bg-gray-800 h-full relative shadow-2xl sm:border-x-4 border-gray-700">
         
-        <!-- Tabs -->
-        <div class="flex gap-2 mb-6 border-b border-gray-700">
-            <button id="tabCreate" class="px-4 py-2 font-bold border-b-2 border-blue-500 text-blue-500 transition">➕ Vytvořit nový</button>
-            <button id="tabEdit" class="px-4 py-2 font-bold text-gray-400 hover:text-white transition">✏️ Upravit existující</button>
+        <!-- LOADING COVER -->
+        <div id="loadingOverlay" class="absolute inset-0 bg-gray-900 z-[100] flex flex-col items-center justify-center">
+            <div class="loader mb-4"></div>
+            <p class="text-gray-400 font-bold tracking-widest text-sm">PŘIPOJOVÁNÍ...</p>
         </div>
 
-        <!-- CREATE NEW SECTION -->
-        <div id="createSection" class="create-section">
-        <p class="text-gray-400 mb-6 text-sm">Vlož seznam jmen a obrázků. Skript se pokusí automaticky rozpoznat jméno a odkaz.</p>
+        <!-- VIEW CONTENT -->
+        <div id="viewContent" class="flex-1 flex flex-col overflow-hidden relative"></div>
+    </div>
 
-        <!-- 1. Název setu -->
-        <div class="mb-6">
-            <label class="block text-sm font-bold mb-2 text-gray-300">Název nového setu</label>
-            <input type="text" id="setTitle" placeholder="Např. Slavní Fotbalisti" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-white font-bold text-lg">
-        </div>
-
-        <!-- 2. Text Area -->
-        <div class="mb-4">
-            <label class="block text-sm font-bold mb-2 text-gray-300">
-                Data (Jeden záznam na řádek)
-            </label>
-            <p class="text-xs text-gray-500 mb-2">
-                Formát: Jméno [oddělovač] Odkaz<br>
-                Příklad: <code>1. Messi - https://obrazek.jpg</code>
-            </p>
-            <textarea id="rawData" rows="10" class="w-full p-3 bg-gray-900 rounded-lg border border-gray-600 font-mono text-sm focus:border-blue-500 focus:outline-none text-gray-300" placeholder="Vlož sem seznam..."></textarea>
-        </div>
-
-        <!-- 3. Preview Area -->
-        <div class="mb-6 bg-gray-700 p-4 rounded-lg">
-            <div class="flex justify-between items-center mb-2">
-                <span class="text-sm font-bold uppercase text-gray-400">Náhled rozpoznaných položek</span>
-                <span id="itemCount" class="bg-blue-600 text-xs px-2 py-1 rounded text-white">0 položek</span>
+    <!-- ŠABLONY -->
+    
+    <!-- 1. MENU -->
+    <template id="tpl-menu">
+        <div class="flex flex-col h-full bg-gray-900">
+            <div class="p-6 pb-2 text-center shrink-0">
+                <h1 class="text-5xl font-black text-red-600 tracking-tighter">SPYGAME</h1>
+                <p class="text-gray-500 text-[10px] tracking-[0.4em] uppercase -mt-1 font-bold">Find The Impostor</p>
             </div>
-            <div id="previewList" class="max-h-60 overflow-y-auto space-y-2 text-sm text-gray-300 pr-2">
-                <div class="text-gray-500 italic">Zatím žádná data...</div>
-            </div>
-        </div>
-
-        <!-- 4. Upload Button -->
-        <button id="btnUpload" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl transition shadow-lg text-xl flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled>
-            <span>☁️</span> Nahrát na Firebase
-        </button>
-
-        <div id="status" class="mt-4 text-center font-bold min-h-[24px]"></div>
-        </div>
-
-        <!-- EDIT EXISTING SECTION -->
-        <div id="editSection" class="edit-section hidden">
-            <p class="text-gray-400 mb-4 text-sm">Vyber existující set ze seznamu a uprav ho.</p>
             
-            <!-- Set Selector -->
-            <div class="mb-6">
-                <label class="block text-sm font-bold mb-2 text-gray-300">Vyber set k úpravě</label>
-                <select id="setSelector" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-white font-bold">
-                    <option value="">Načítám sety...</option>
-                </select>
-            </div>
-
-            <!-- Selected Set Editor -->
-            <div id="setEditor" class="hidden">
-                <div class="mb-4">
-                    <label class="block text-sm font-bold mb-2 text-gray-300">Název setu</label>
-                    <input type="text" id="editSetTitle" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-white font-bold text-lg">
-                </div>
-
-                <div class="mb-4 bg-gray-700 p-4 rounded-lg">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="text-sm font-bold uppercase text-gray-400">Položky v setu</span>
-                        <span id="editItemCount" class="bg-blue-600 text-xs px-2 py-1 rounded text-white">0 položek</span>
-                    </div>
-                    <button id="btnAddItem" class="w-full mb-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition">
-                        ➕ Přidat položku
-                    </button>
-                    <div id="editItemsList" class="space-y-2 max-h-96 overflow-y-auto pr-2">
-                        <!-- Items will be rendered here -->
-                    </div>
+            <div class="px-6 space-y-3 shrink-0">
+                <input type="text" id="playerNameInput" class="w-full p-3 rounded-xl bg-gray-800 border border-gray-700 focus:border-red-500 outline-none text-center text-lg font-bold text-white placeholder-gray-600 transition-all" placeholder="Tvoje Přezdívka">
+                
+                <div class="bg-gray-900 p-2 rounded-xl border border-gray-700 flex flex-col">
+                    <label class="text-[10px] font-bold text-gray-500 ml-1 mb-1 uppercase">Sada Karet</label>
+                    <select id="cardSetSelect" class="w-full bg-transparent text-white font-bold outline-none text-sm p-1">
+                        <option value="" disabled selected>Načítám...</option>
+                    </select>
                 </div>
 
                 <div class="flex gap-2">
-                    <button id="btnSaveSet" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition shadow-lg">
-                        💾 Uložit změny
+                    <button id="btnCreateGame" class="flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold text-lg shadow-lg active:scale-95 transition-all">
+                        VYTVOŘIT
                     </button>
-                    <button id="btnDeleteSet" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl transition shadow-lg">
-                        🗑️ Smazat
-                    </button>
+                    <div class="flex flex-col flex-1 gap-1">
+                        <div class="flex gap-1 h-full">
+                            <input type="text" id="gameCodeInput" placeholder="KÓD" class="w-16 p-0 text-center rounded-l-xl bg-gray-800 border-y border-l border-gray-700 outline-none text-sm font-mono uppercase text-white">
+                            <button id="btnJoinGame" class="flex-1 bg-gray-700 hover:bg-gray-600 rounded-r-xl font-bold text-sm border border-gray-700">
+                                PŘIPOJIT
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div id="editStatus" class="mt-4 text-center font-bold min-h-[24px]"></div>
-        </div>
-    </div>
+            <div class="flex-1 flex flex-col px-6 pt-4 pb-2 min-h-0">
+                <p class="text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">🏠 Aktivní místnosti (Max 5)</p>
+                <div id="activeLobbiesList" class="flex-1 overflow-y-auto space-y-2 pr-1 pb-2">
+                    <div class="text-center text-gray-600 text-xs py-4 italic">Hledám hry...</div>
+                </div>
+            </div>
 
-    <!-- Firebase -->
+            <button id="btnAdminUpload" class="text-gray-800 text-[9px] py-1 text-center hover:text-gray-600">Admin Tools</button>
+        </div>
+    </template>
+
+    <!-- 2. LOBBY -->
+    <template id="tpl-lobby">
+        <div class="flex flex-col h-full p-4 bg-gray-800">
+            <div class="bg-gray-900 rounded-2xl p-4 text-center border border-gray-700 mb-4 shrink-0 shadow-lg">
+                <p class="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1">Kód místnosti</p>
+                <div id="displayGameCode" class="text-5xl font-mono font-black text-white tracking-widest select-all">????</div>
+                <div id="selectedSetName" class="text-[10px] text-blue-400 font-bold uppercase mt-1 tracking-wide">...</div>
+            </div>
+
+            <div class="flex justify-between items-end mb-2 px-2">
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wide">Hráči v lobby</h3>
+                <span id="playerCountBadge" class="text-[10px] bg-gray-700 px-2 py-0.5 rounded text-white font-bold">0</span>
+            </div>
+            
+            <ul id="playersList" class="bg-gray-900/50 rounded-2xl p-2 space-y-1.5 flex-grow overflow-y-auto border border-gray-700 shadow-inner"></ul>
+
+            <div class="mt-4 shrink-0">
+                <div id="hostControls" class="hidden">
+                    <button id="btnStartGame" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-xl font-bold text-xl shadow-lg animate-pulse transition-all active:scale-95">
+                        SPUSTIT HRU
+                    </button>
+                </div>
+                <div id="waitingForHost" class="hidden text-center py-4 text-gray-500 font-bold text-xs animate-pulse">
+                    ČEKÁME NA ZAKLADATELE...
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 3. GAME (REVEAL) -->
+    <template id="tpl-game">
+        <div class="flex flex-col h-full bg-gray-900 relative">
+            
+            <!-- A: OVERLAY - ODHALIT (První krok) -->
+            <div id="revealOverlay" class="absolute inset-0 z-50 bg-gray-900 flex flex-col items-center justify-center p-6">
+                <button id="btnReveal" class="w-full max-w-sm aspect-[3/4] bg-gray-800 rounded-3xl border-4 border-dashed border-gray-700 flex flex-col items-center justify-center group active:scale-95 transition-all shadow-2xl">
+                    <span class="text-6xl mb-4 group-hover:scale-110 transition-transform grayscale group-hover:grayscale-0">🕵️</span>
+                    <span class="text-xl font-bold text-gray-300 uppercase tracking-widest">Dotkni se<br>pro roli</span>
+                </button>
+            </div>
+
+            <!-- B: OVERLAY - ČEKÁNÍ (Po potvrzení) -->
+            <div id="waitingOverlay" class="hidden absolute inset-0 z-40 bg-gray-900 flex flex-col items-center justify-center p-6 text-center">
+                <div class="loader mb-6 border-gray-600 border-t-blue-500"></div>
+                <h3 class="text-2xl font-bold text-white mb-2">Jsi připraven</h3>
+                <p class="text-gray-400 text-sm mb-4">Čekáme na ostatní...</p>
+                <div id="readyCount" class="text-4xl font-mono font-bold text-blue-500 bg-gray-800 px-6 py-2 rounded-xl border border-gray-700">0/0</div>
+            </div>
+
+            <!-- C: OBSAH ROLE -->
+            <div id="roleContainer" class="flex flex-col h-full w-full">
+                
+                <!-- 1. IMPOSTOR VIEW -->
+                <div id="impostorView" class="hidden flex-col items-center justify-center h-full p-6 bg-gradient-to-b from-gray-900 to-red-900/40 relative text-center">
+                    <h1 class="text-5xl font-black text-red-500 mb-2 tracking-tighter">IMPOSTOR</h1>
+                    <div class="text-9xl my-8 filter drop-shadow-lg animate-bounce">🤫</div>
+                    <p class="text-xl font-bold text-white">Jsi špion!</p>
+                    <p class="text-sm text-gray-400 mt-2">Neznáš tajné slovo.<br>Tvař se nenápadně.</p>
+                    
+                    <button id="impostorConfirmBtn" class="mt-auto w-full bg-red-600 hover:bg-red-500 py-4 rounded-xl font-bold text-white shadow-lg uppercase tracking-wider">
+                        Mám to, pokračovat
+                    </button>
+                </div>
+
+                <!-- 2. CREWMATE VIEW (Klasické rozložení) -->
+                <div id="crewmateView" class="hidden flex-col h-full w-full bg-gray-900 p-4">
+                    <div class="text-center pb-2 shrink-0">
+                        <h1 class="text-3xl font-black text-green-500 uppercase tracking-tighter">AGENT</h1>
+                    </div>
+
+                    <!-- Karta s obrázkem -->
+                    <div class="flex-1 bg-black rounded-xl border border-gray-700 relative overflow-hidden flex flex-col mb-4">
+                        <div class="bg-gray-800 p-3 border-b border-gray-700 text-center shrink-0">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Tajný Cíl</p>
+                            <p id="secretName" class="text-2xl font-black text-white leading-none truncate">...</p>
+                        </div>
+                        <div class="flex-1 relative w-full h-full p-2">
+                             <img id="secretImage" src="" referrerpolicy="no-referrer" class="w-full h-full object-contain rounded-lg" alt="Tajný cíl" onerror="this.onerror=null; this.src='https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png';">
+                        </div>
+                    </div>
+
+                    <button id="crewmateConfirmBtn" class="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-white shadow-lg uppercase tracking-wider shrink-0">
+                        Mám to, pokračovat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 4. DISCUSSION -->
+    <template id="tpl-discussion">
+        <div class="flex flex-col h-full p-3 bg-gray-900">
+            <!-- Info Bar -->
+            <div class="flex justify-between items-center bg-gray-800 p-2.5 rounded-xl border border-gray-700 mb-2 shrink-0 shadow-md">
+                <div>
+                    <span class="text-[9px] text-gray-500 uppercase font-bold block">Kolo</span>
+                    <span id="roundIndicator" class="text-lg font-bold text-white">1/3</span>
+                </div>
+                <div class="text-right flex flex-col items-end w-2/3">
+                    <span class="text-[9px] text-gray-500 uppercase font-bold block">Na tahu</span>
+                    <span id="currentTurnPlayer" class="text-yellow-400 font-bold truncate w-full text-right text-lg">...</span>
+                </div>
+            </div>
+
+            <!-- Chat -->
+            <div id="chatContainer" class="flex-grow bg-gray-800/30 rounded-xl p-3 overflow-y-auto flex flex-col mb-2 border border-gray-700/50"></div>
+
+            <!-- Emergency -->
+            <button id="btnEmergency" class="w-full py-3 rounded-xl mb-2 flex items-center justify-center gap-3 font-bold bg-red-900/20 text-red-500 border border-red-900/50 shrink-0 transition-colors">
+                <span class="text-xl">🚨</span>
+                <div class="flex flex-col items-start leading-none">
+                    <span class="text-xs uppercase font-black">Emergency Meeting</span>
+                    <span id="emergencyCount" class="text-[9px] font-normal opacity-70">0/0</span>
+                </div>
+            </button>
+
+            <!-- Input -->
+            <div class="shrink-0 relative">
+                <div id="notMyTurnMsg" class="absolute inset-0 bg-gray-800/95 rounded-xl flex items-center justify-center text-gray-500 text-xs font-bold border border-gray-700 border-dashed z-10 backdrop-blur-sm">
+                    Čekej na svůj tah...
+                </div>
+                <form id="chatForm" class="flex gap-2 h-[56px]">
+                    <input type="text" id="chatInput" class="flex-1 p-3 rounded-xl bg-gray-700 border border-gray-600 text-white font-bold outline-none focus:border-blue-500 placeholder-gray-500" placeholder="Max 3 slova...">
+                    <button type="submit" class="w-[56px] bg-blue-600 rounded-xl font-bold text-xl flex items-center justify-center hover:bg-blue-500 text-white shadow-lg">➤</button>
+                </form>
+                <p id="wordCountError" class="hidden absolute -top-8 left-0 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg">⚠️ Max 3 slova!</p>
+            </div>
+        </div>
+    </template>
+
+    <!-- 5. VOTING -->
+    <template id="tpl-voting">
+        <div class="flex flex-col h-full p-4 pt-8 bg-gray-900">
+            <h2 class="text-4xl font-black text-red-600 uppercase tracking-tighter text-center mb-1 shrink-0 drop-shadow-lg">KDO JE SPY?</h2>
+            <p class="text-center text-gray-400 text-xs mb-6 shrink-0 uppercase tracking-wider">Označ podezřelého</p>
+            
+            <div id="votingList" class="flex-grow overflow-y-auto space-y-3 pr-1 pb-4"></div>
+            
+            <div id="voteStatus" class="mt-2 text-center text-gray-600 font-mono text-[10px] shrink-0 uppercase">Čekání na hlasy...</div>
+        </div>
+    </template>
+
+    <!-- 6. RESULTS -->
+    <template id="tpl-results">
+        <div class="flex flex-col h-full justify-center items-center p-6 bg-gray-900">
+            <h1 id="winTitle" class="text-5xl font-black mb-8 uppercase tracking-tighter text-center drop-shadow-2xl">???</h1>
+            
+            <div class="bg-gray-800 w-full rounded-3xl border border-gray-700 overflow-hidden shadow-2xl mb-8">
+                <div class="p-6 text-center border-b border-gray-700 bg-gray-800/50">
+                    <p class="text-gray-500 uppercase text-[10px] font-bold tracking-widest mb-3">Impostor byl</p>
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center text-4xl shadow-lg border-4 border-gray-700">🤫</div>
+                        <span id="revealImpostorName" class="text-3xl font-black text-white"></span>
+                    </div>
+                </div>
+
+                <div class="p-6 text-center bg-green-900/10">
+                    <p class="text-gray-500 uppercase text-[10px] font-bold tracking-widest mb-2">Tajné slovo</p>
+                    <p id="revealSecretWord" class="text-3xl font-black text-green-400 tracking-wide leading-tight"></p>
+                </div>
+            </div>
+
+            <!-- Host Actions -->
+            <div id="hostResultControls" class="w-full space-y-3 hidden">
+                <button id="btnPlayAgain" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(34,197,94,0.4)] border border-green-500 active:scale-95 transition-all text-lg uppercase tracking-tight">
+                    🔄 Hrát znovu (Reset)
+                </button>
+                <button id="btnExitGame" class="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-xl font-bold text-gray-300 text-sm">
+                    Ukončit hru
+                </button>
+            </div>
+            
+            <!-- Player Waiting -->
+            <div id="playerResultWaiting" class="text-center space-y-4">
+                <div class="loader mx-auto border-gray-600 border-t-green-500"></div>
+                <p class="text-gray-400 font-bold text-sm uppercase">Čekání na hostitele...</p>
+                <button id="btnPlayerExit" class="text-gray-600 underline text-xs mt-4">Odejít do menu</button>
+            </div>
+
+        </div>
+    </template>
+
+    <!-- LOGIKA APLIKACE -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, arrayUnion, getDoc, getDocs, addDoc, query, where, deleteDoc, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // CONFIG
         const firebaseConfig = {
@@ -123,302 +304,496 @@
             appId: "1:151689614342:web:d561337f3083efaf0e9f87",
             measurementId: "G-ZWD05TCV8Q"
         };
-
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         const appId = 'spygame-87b8b';
 
-        // DOM Elements
-        const rawInput = document.getElementById('rawData');
-        const previewList = document.getElementById('previewList');
-        const countBadge = document.getElementById('itemCount');
-        const btnUpload = document.getElementById('btnUpload');
-        const titleInput = document.getElementById('setTitle');
-        const statusDiv = document.getElementById('status');
+        let currentUser = null;
+        let currentGameId = null;
+        let unsubscribeGame = null;
+        let unsubscribeLobbyList = null;
+        const SILHOUETTE_URL = "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png";
+
+        const container = document.getElementById('viewContent');
+        const overlay = document.getElementById('loadingOverlay');
+
+        function renderView(templateId, callback) {
+            container.innerHTML = '';
+            const tpl = document.getElementById(templateId);
+            const clone = tpl.content.cloneNode(true);
+            container.appendChild(clone);
+            if (callback) callback();
+        }
+
+        function showLoading(show) { overlay.classList.toggle('hidden', !show); }
+
+        // --- AUTH ---
+        showLoading(true);
+        signInAnonymously(auth).catch(e => console.error(e));
         
-        // Edit Section Elements
-        const tabCreate = document.getElementById('tabCreate');
-        const tabEdit = document.getElementById('tabEdit');
-        const createSection = document.getElementById('createSection');
-        const editSection = document.getElementById('editSection');
-        const setSelector = document.getElementById('setSelector');
-        const setEditor = document.getElementById('setEditor');
-        const editSetTitle = document.getElementById('editSetTitle');
-        const editItemsList = document.getElementById('editItemsList');
-        const editItemCount = document.getElementById('editItemCount');
-        const btnSaveSet = document.getElementById('btnSaveSet');
-        const btnDeleteSet = document.getElementById('btnDeleteSet');
-        const btnAddItem = document.getElementById('btnAddItem');
-        const editStatus = document.getElementById('editStatus');
-        
-        let currentEditingSetId = null;
-        let currentEditingItems = [];
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                renderMenu();
+                showLoading(false);
+            }
+        });
 
-        let parsedItems = [];
+        // --- 1. MENU ---
+        function renderMenu() {
+            renderView('tpl-menu', () => {
+                const nameInp = document.getElementById('playerNameInput');
+                const setSel = document.getElementById('cardSetSelect');
+                const lobbyList = document.getElementById('activeLobbiesList');
 
-        // --- PARSER LOGIC ---
-        function parseText() {
-            const text = rawInput.value;
-            const lines = text.split('\n');
-            parsedItems = [];
+                // Load Sets
+                getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'cardSets')).then(snap => {
+                    setSel.innerHTML = '';
+                    if (snap.empty) setSel.innerHTML = '<option disabled>Žádné sety</option>';
+                    else {
+                        snap.forEach(d => {
+                            const opt = document.createElement('option');
+                            opt.value = d.id;
+                            opt.textContent = d.data().title;
+                            setSel.appendChild(opt);
+                        });
+                                            }
+                });
 
-            lines.forEach(line => {
-                if (!line.trim()) return;
+                // LIVE LOBBY LISTENER
+                if(unsubscribeLobbyList) unsubscribeLobbyList();
+                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'games'));
+                
+                unsubscribeLobbyList = onSnapshot(q, (snap) => {
+                    lobbyList.innerHTML = '';
+                    const lobbies = [];
+                    snap.forEach(doc => {
+                        const d = doc.data();
+                        if (d.status === "LOBBY") {
+                            lobbies.push({ id: doc.id, ...d });
+                        }
+                    });
 
-                // 1. Najít kde začíná HTTP
-                // Hledáme index "http"
-                const urlIndex = line.indexOf('http');
-
-                if (urlIndex !== -1) {
-                    // Rozdělit na jméno a link
-                    let namePart = line.substring(0, urlIndex).trim();
-                    let urlPart = line.substring(urlIndex).trim();
-
-                    // Čištění jména
-                    // Odstraní "1. ", "1)", "-", ",", ":" z konce i začátku
-                    // Regex: Odstraní číslice a tečku na začátku, a interpunkci na konci
-                    namePart = namePart.replace(/^[\d\W]+/, ''); // "1. Jméno" -> "Jméno"
-                    namePart = namePart.replace(/[,:\-\(\)]+$/, ''); // "Jméno - " -> "Jméno"
-                    namePart = namePart.trim();
-                    
-                    // Čištění URL (pro jistotu odstraní závorku na konci, pokud tam je)
-                    urlPart = urlPart.replace(/\)$/, '');
-
-                    if (namePart && urlPart) {
-                        parsedItems.push({ name: namePart, image: urlPart });
+                    if(lobbies.length === 0) {
+                        lobbyList.innerHTML = '<div class="text-center text-gray-700 text-xs py-4">Žádné aktivní hry</div>';
+                    } else {
+                        lobbies.forEach(d => {
+                             const code = d.id;
+                            const players = d.players ? d.players.length : 0;
+                            const hostName = d.players && d.players.length > 0 ? d.players[0].name : "Neznámý";
+                            
+                            const item = document.createElement('div');
+                            item.className = "bg-gray-800 p-3 rounded-xl border border-gray-700 flex justify-between items-center";
+                            item.innerHTML = `
+                                <div>
+                                    <div class="font-bold text-sm text-white">${code} <span class="text-gray-500 font-normal">(${hostName})</span></div>
+                                    <div class="text-[10px] text-gray-500 uppercase">${d.cardSetName || "Neznámý set"} • ${players} hráčů</div>
+                                </div>
+                                <button class="bg-blue-600 text-xs px-3 py-1.5 rounded-lg font-bold hover:bg-blue-500 text-white">PŘIPOJIT</button>
+                            `;
+                            item.querySelector('button').onclick = () => {
+                                document.getElementById('gameCodeInput').value = code;
+                                document.getElementById('btnJoinGame').click();
+                            };
+                            lobbyList.appendChild(item);
+                        });
                     }
+                });
+
+                // Create Logic
+                document.getElementById('btnCreateGame').onclick = async () => {
+                    const name = nameInp.value.trim();
+                    const setId = setSel.value;
+                    if(!name || !setId) return alert("Vyplň jméno a vyber karty!");
+                    showLoading(true);
+                    if(unsubscribeLobbyList) unsubscribeLobbyList();
+                    
+                    // GARBAGE COLLECTOR
+                    const gamesRef = collection(db, 'artifacts', appId, 'public', 'data', 'games');
+                    const allGamesSnap = await getDocs(gamesRef);
+                    let allGames = [];
+                    allGamesSnap.forEach(doc => allGames.push({id: doc.id, ...doc.data()}));
+                    allGames.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+                    
+                    if(allGames.length >= 5) {
+                        const toDelete = allGames.slice(4);
+                        for(const g of toDelete) {
+                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', g.id));
+                        }
+                    }
+
+                    const code = Math.random().toString(36).substr(2,4).toUpperCase();
+                    const setName = setSel.options[setSel.selectedIndex].text;
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', code), {
+                        hostId: currentUser.uid, status: 'LOBBY', cardSetId: setId, cardSetName: setName, createdAt: new Date().toISOString(),
+                        players: [{ uid: currentUser.uid, name: name, isHost: true }],
+                        readyPlayers: [], turnOrder: [], chatMessages: [], currentTurnIndex: 0, votes: {}, emergencyVotes: [], usedItems: []
+                    });
+                    joinGame(code);
+                };
+
+                // Join Logic
+                document.getElementById('btnJoinGame').onclick = async () => {
+                    const name = nameInp.value.trim();
+                    const code = document.getElementById('gameCodeInput').value.trim().toUpperCase();
+                    if(!name || code.length !== 4) return alert("Chyba údajů!");
+                    showLoading(true);
+                    if(unsubscribeLobbyList) unsubscribeLobbyList();
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'games', code);
+                    const snap = await getDoc(ref);
+                    if(!snap.exists()) { showLoading(false); return alert("Hra neexistuje"); }
+                    const d = snap.data();
+                    if(!d.players.find(p => p.uid === currentUser.uid)) {
+                        if(d.status !== 'LOBBY') { showLoading(false); return alert("Hra už běží"); }
+                        await updateDoc(ref, { players: arrayUnion({ uid: currentUser.uid, name: name, isHost: false }) });
+                    }
+                    joinGame(code);
+                };
+                
+                document.getElementById('btnAdminUpload').onclick = async () => {
+                    if(!confirm("Nahrát default?")) return;
+                    const items = ["Martin","Kuba","Honzík","Vojta"].map(n=>({name:n,image:SILHOUETTE_URL}));
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'cardSets'), {title:"Test Jména", items});
+                    alert("Hotovo"); location.reload();
+                };
+            });
+        }
+
+        // --- GAME JOIN & LOOP ---
+        function joinGame(gameId) {
+            currentGameId = gameId;
+            if(unsubscribeGame) unsubscribeGame();
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'games', gameId);
+
+            unsubscribeGame = onSnapshot(ref, (snap) => {
+                if(!snap.exists()) { location.reload(); return; }
+                const data = snap.data();
+                showLoading(false);
+
+                const currentView = container.getAttribute('data-view');
+                if (data.status !== currentView) {
+                    container.setAttribute('data-view', data.status);
+                    switch(data.status) {
+                        case 'LOBBY': renderLobby(data); break;
+                        case 'REVEAL': renderReveal(data); break;
+                        case 'DISCUSSION': renderDiscussion(data); break;
+                        case 'VOTING': renderVoting(data); break;
+                        case 'RESULTS': renderResults(data); break;
+                    }
+                } else {
+                    updateCurrentView(data);
                 }
             });
-
-            renderPreview();
         }
 
-        function renderPreview() {
-            previewList.innerHTML = '';
-            countBadge.textContent = `${parsedItems.length} položek`;
+        // --- RENDERERS ---
+        function renderLobby(data) { renderView('tpl-lobby', () => updateLobby(data)); }
+        function updateLobby(data) {
+            document.getElementById('displayGameCode').textContent = currentGameId;
+            document.getElementById('playerCountBadge').textContent = data.players.length;
+            document.getElementById('selectedSetName').textContent = data.cardSetName || "";
+            const list = document.getElementById('playersList');
+            list.innerHTML = '';
+            data.players.forEach(p => {
+                const isMe = p.uid === currentUser.uid;
+                const li = document.createElement('li');
+                li.className = `flex justify-between items-center p-3 rounded-xl border ${isMe ? 'bg-gray-800 border-blue-500' : 'bg-gray-800/50 border-gray-700'}`;
+                li.innerHTML = `<span class="font-bold text-sm text-white">${p.name}</span>${p.isHost ? '<span class="text-[9px] bg-yellow-600 px-1.5 py-0.5 rounded text-white font-bold">HOST</span>' : ''}`;
+                list.appendChild(li);
+            });
+            const amHost = data.hostId === currentUser.uid;
+            document.getElementById('hostControls').classList.toggle('hidden', !amHost);
+            document.getElementById('waitingForHost').classList.toggle('hidden', amHost);
+            if (amHost) {
+                document.getElementById('btnStartGame').onclick = async () => {
+                    if (data.players.length < 2) return alert("Min 2 hráči");
+                    showLoading(true);
+                    try {
+                        const setRef = doc(db, 'artifacts', appId, 'public', 'data', 'cardSets', data.cardSetId);
+                        const sSnap = await getDoc(setRef);
+                        const allItems = sSnap.exists() ? sSnap.data().items : [{name:"Err", image:SILHOUETTE_URL}];
+                        
+                        // Get used items from current game data
+                        const usedItems = data.usedItems || [];
+                        const usedItemNames = new Set(usedItems.map(item => item.name));
+                        
+                        // Filter out already used items
+                        const availableItems = allItems.filter(item => !usedItemNames.has(item.name));
+                        
+                        // If all items have been used, reset and use all items again
+                        const itemsToChooseFrom = availableItems.length > 0 ? availableItems : allItems;
+                        const item = itemsToChooseFrom[Math.floor(Math.random() * itemsToChooseFrom.length)];
+                        
+                        // Add selected item to usedItems (or reset if we ran out)
+                        const newUsedItems = availableItems.length > 0 
+                            ? [...usedItems, item] 
+                            : [item];
+                        
+                        const imp = data.players[Math.floor(Math.random() * data.players.length)];
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
+                            status: 'REVEAL', secretItem: item, impostorUid: imp.uid, readyPlayers: [], votes: {}, emergencyVotes: [], usedItems: newUsedItems
+                        });
+                    } catch(e) { console.error(e); showLoading(false); }
+                };
+            }
+        }
 
-            if (parsedItems.length === 0) {
-                previewList.innerHTML = '<div class="text-gray-500 italic">Zatím žádná platná data (musí obsahovat http odkaz)...</div>';
-                btnUpload.disabled = true;
-                btnUpload.classList.add('opacity-50', 'cursor-not-allowed');
-                return;
+        function renderReveal(data) { renderView('tpl-game', () => updateReveal(data)); }
+        function updateReveal(data) {
+            const isImp = data.impostorUid === currentUser.uid;
+            const isReady = data.readyPlayers && data.readyPlayers.includes(currentUser.uid);
+            
+            const overlayReveal = document.getElementById('revealOverlay');
+            const overlayWait = document.getElementById('waitingOverlay');
+            const impView = document.getElementById('impostorView');
+            const crewView = document.getElementById('crewmateView');
+
+            // If user has already revealed and is crewmate, ensure image is set when view updates
+            if (!isImp && overlayReveal && overlayReveal.classList.contains('hidden') && data.secretItem) {
+                const imgEl = document.getElementById('secretImage');
+                if (imgEl && data.secretItem.image && imgEl.src !== data.secretItem.image) {
+                    imgEl.src = data.secretItem.image;
+                    imgEl.onerror = function() {
+                        this.onerror = null;
+                        this.src = SILHOUETTE_URL;
+                    };
+                }
             }
 
-            // Povolit upload jen pokud je název
-            checkValidity();
-
-            parsedItems.forEach((item, index) => {
-                const div = document.createElement('div');
-                div.className = "flex items-center gap-3 bg-gray-900 p-2 rounded border border-gray-600";
-                div.innerHTML = `
-                    <span class="text-gray-500 font-mono w-6 text-right">${index + 1}.</span>
-                    <img src="${item.image}" class="w-8 h-8 rounded-full object-cover bg-gray-700" onerror="this.src='https://via.placeholder.com/32'">
-                    <span class="font-bold text-white truncate">${item.name}</span>
-                    <a href="${item.image}" target="_blank" class="text-blue-500 text-xs hover:underline ml-auto truncate max-w-[150px]">${item.image}</a>
-                `;
-                previewList.appendChild(div);
-            });
-        }
-
-        function checkValidity() {
-            const hasTitle = titleInput.value.trim().length > 0;
-            const hasItems = parsedItems.length > 0;
-            
-            if (hasTitle && hasItems) {
-                btnUpload.disabled = false;
-                btnUpload.classList.remove('opacity-50', 'cursor-not-allowed');
+            if (isReady) {
+                overlayReveal.classList.add('hidden');
+                overlayWait.classList.remove('hidden');
+                document.getElementById('readyCount').textContent = `${data.readyPlayers.length}/${data.players.length}`;
             } else {
-                btnUpload.disabled = true;
-                btnUpload.classList.add('opacity-50', 'cursor-not-allowed');
+                overlayWait.classList.add('hidden');
             }
-        }
 
-        // Listeners
-        rawInput.addEventListener('input', parseText);
-        titleInput.addEventListener('input', checkValidity);
-
-        // UPLOAD
-        btnUpload.addEventListener('click', async () => {
-            const title = titleInput.value.trim();
-            if (!title || parsedItems.length === 0) return;
-
-            statusDiv.textContent = "⏳ Připojuji se a nahrávám...";
-            statusDiv.className = "mt-4 text-center font-bold text-yellow-400";
-            btnUpload.disabled = true;
-
-            try {
-                await signInAnonymously(auth);
-
-                const setsRef = collection(db, 'artifacts', appId, 'public', 'data', 'cardSets');
-                
-                await addDoc(setsRef, {
-                    title: title,
-                    items: parsedItems,
-                    createdAt: new Date().toISOString()
-                });
-
-                statusDiv.innerHTML = `✅ ÚSPĚCH! Set <b>"${title}"</b> s ${parsedItems.length} položkami byl nahrán.`;
-                statusDiv.className = "mt-4 text-center font-bold text-green-400";
-                
-                // Reset
-                setTimeout(() => {
-                    if(confirm("Chceš nahrát další set?")) {
-                        titleInput.value = "";
-                        rawInput.value = "";
-                        parseText();
-                        statusDiv.textContent = "";
+            // Reveal Button
+            document.getElementById('btnReveal').onclick = () => {
+                overlayReveal.classList.add('hidden');
+                if (isImp) {
+                    impView.classList.remove('hidden');
+                    crewView.classList.add('hidden');
+                } else {
+                    impView.classList.add('hidden');
+                    crewView.classList.remove('hidden');
+                    document.getElementById('secretName').textContent = data.secretItem.name;
+                    const imgEl = document.getElementById('secretImage');
+                    if (data.secretItem && data.secretItem.image) {
+                        imgEl.src = data.secretItem.image;
+                        imgEl.onerror = function() {
+                            this.onerror = null;
+                            this.src = SILHOUETTE_URL;
+                        };
+                    } else {
+                        imgEl.src = SILHOUETTE_URL;
                     }
-                }, 1000);
-
-            } catch (e) {
-                console.error(e);
-                statusDiv.textContent = "❌ Chyba: " + e.message;
-                statusDiv.className = "mt-4 text-center font-bold text-red-500";
-                btnUpload.disabled = false;
-            }
-        });
-
-        // --- TAB SWITCHING ---
-        tabCreate.addEventListener('click', () => {
-            createSection.classList.remove('hidden');
-            editSection.classList.add('hidden');
-            tabCreate.classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
-            tabCreate.classList.remove('text-gray-400');
-            tabEdit.classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-            tabEdit.classList.add('text-gray-400');
-        });
-
-        tabEdit.addEventListener('click', async () => {
-            createSection.classList.add('hidden');
-            editSection.classList.remove('hidden');
-            tabEdit.classList.add('border-b-2', 'border-blue-500', 'text-blue-500');
-            tabEdit.classList.remove('text-gray-400');
-            tabCreate.classList.remove('border-b-2', 'border-blue-500', 'text-blue-500');
-            tabCreate.classList.add('text-gray-400');
-            await loadExistingSets();
-        });
-
-        // --- LOAD EXISTING SETS ---
-        async function loadExistingSets() {
-            try {
-                await signInAnonymously(auth);
-                const setsRef = collection(db, 'artifacts', appId, 'public', 'data', 'cardSets');
-                const snap = await getDocs(setsRef);
-                
-                setSelector.innerHTML = '<option value="">Vyber set...</option>';
-                
-                if (snap.empty) {
-                    setSelector.innerHTML = '<option value="">Žádné sety nenalezeny</option>';
-                    return;
                 }
-                
-                snap.forEach(doc => {
-                    const opt = document.createElement('option');
-                    opt.value = doc.id;
-                    opt.textContent = doc.data().title;
-                    setSelector.appendChild(opt);
+            };
+
+            const confirmAction = async () => {
+                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
+                    readyPlayers: arrayUnion(currentUser.uid)
                 });
-            } catch (e) {
-                console.error(e);
-                editStatus.textContent = "❌ Chyba při načítání: " + e.message;
-                editStatus.className = "mt-4 text-center font-bold text-red-500";
+            };
+
+            document.getElementById('crewmateConfirmBtn').onclick = confirmAction;
+            document.getElementById('impostorConfirmBtn').onclick = confirmAction;
+
+            if (data.hostId === currentUser.uid && data.readyPlayers && data.readyPlayers.length === data.players.length) {
+                const order = data.players.map(p => p.uid).sort(() => Math.random() - 0.5);
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
+                    status: 'DISCUSSION', turnOrder: order, currentTurnIndex: 0
+                });
             }
         }
 
-        // --- LOAD SET FOR EDITING ---
-        setSelector.addEventListener('change', async (e) => {
-            const setId = e.target.value;
-            if (!setId) {
-                setEditor.classList.add('hidden');
-                return;
-            }
+        // Helper function to check and transition to voting if emergency threshold is met
+        async function checkEmergencyThreshold(gameData) {
+            if (!gameData || gameData.status !== 'DISCUSSION') return false;
             
-            try {
-                await signInAnonymously(auth);
-                const setRef = doc(db, 'artifacts', appId, 'public', 'data', 'cardSets', setId);
-                const setSnap = await getDoc(setRef);
-                
-                if (setSnap.exists()) {
-                    const data = setSnap.data();
-                    currentEditingSetId = setId;
-                    currentEditingItems = [...(data.items || [])];
-                    
-                    editSetTitle.value = data.title;
-                    renderEditItems();
-                    setEditor.classList.remove('hidden');
+            const total = gameData.players.length;
+            const eCount = gameData.emergencyVotes ? gameData.emergencyVotes.length : 0;
+            const req = Math.ceil(total * 0.6);
+            const turn = gameData.currentTurnIndex || 0;
+            
+            if (eCount >= req || turn >= total * 3) {
+                // Get fresh data to prevent race conditions
+                const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+                try {
+                    const freshSnap = await getDoc(gameRef);
+                    if (freshSnap.exists()) {
+                        const freshData = freshSnap.data();
+                        // Only transition if still in DISCUSSION and threshold still met
+                        if (freshData.status === 'DISCUSSION') {
+                            const freshCount = freshData.emergencyVotes ? freshData.emergencyVotes.length : 0;
+                            const freshReq = Math.ceil(freshData.players.length * 0.6);
+                            const freshTurn = freshData.currentTurnIndex || 0;
+                            if (freshCount >= freshReq || freshTurn >= freshData.players.length * 3) {
+                                await updateDoc(gameRef, { status: 'VOTING' });
+                                return true;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Emergency threshold check error:', err);
                 }
-            } catch (e) {
-                console.error(e);
-                editStatus.textContent = "❌ Chyba při načítání setu: " + e.message;
-                editStatus.className = "mt-4 text-center font-bold text-red-500";
             }
-        });
+            return false;
+        }
 
-        // --- RENDER EDIT ITEMS ---
-        function renderEditItems() {
-            editItemsList.innerHTML = '';
-            editItemCount.textContent = `${currentEditingItems.length} položek`;
+        function renderDiscussion(data) { renderView('tpl-discussion', () => {
+            document.getElementById('chatForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const inp = document.getElementById('chatInput');
+                const val = inp.value.trim();
+                if(val.split(/\s+/).filter(x=>x).length > 3 || !val) {
+                    const err = document.getElementById('wordCountError'); err.classList.remove('hidden'); setTimeout(()=>err.classList.add('hidden'),2000); return;
+                }
+                inp.value = '';
+                // USE INCREMENT FOR TURN SWITCHING
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
+                    chatMessages: arrayUnion({s: currentUser.uid, t: val}), 
+                    currentTurnIndex: increment(1)
+                });
+            };
+            document.getElementById('btnEmergency').onclick = async () => {
+                const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+                await updateDoc(gameRef, { emergencyVotes: arrayUnion(currentUser.uid) });
+                
+                // Immediately check threshold after voting (any player can trigger if host is slow)
+                const gameSnap = await getDoc(gameRef);
+                if (gameSnap.exists()) {
+                    await checkEmergencyThreshold(gameSnap.data());
+                }
+            };
+            updateDiscussion(data);
+        });}
+
+        function updateDiscussion(data) {
+            const total = data.players.length;
+            const turn = data.currentTurnIndex || 0;
+            const round = Math.floor(turn / total) + 1;
+            document.getElementById('roundIndicator').textContent = `${Math.min(round, 3)}/3`;
             
-            if (currentEditingItems.length === 0) {
-                editItemsList.innerHTML = '<div class="text-gray-500 italic">Žádné položky</div>';
-                return;
+            const uidTurn = data.turnOrder ? data.turnOrder[turn % total] : null;
+            const pTurn = data.players.find(p => p.uid === uidTurn);
+            document.getElementById('currentTurnPlayer').textContent = pTurn?.name || "...";
+
+            const box = document.getElementById('chatContainer');
+            box.innerHTML = '';
+            (data.chatMessages || []).forEach(m => {
+                const isMe = m.s === currentUser.uid;
+                const name = data.players.find(p => p.uid === m.s)?.name || "?";
+                const d = document.createElement('div');
+                d.className = `chat-bubble flex flex-col ${isMe ? 'chat-self' : 'chat-other'}`;
+                d.innerHTML = `<span class="text-[9px] opacity-70 mb-0.5 uppercase font-bold">${name}</span><span class="font-bold">${m.t}</span>`;
+                box.appendChild(d);
+            });
+            box.scrollTop = box.scrollHeight;
+
+            const isMyTurn = uidTurn === currentUser.uid;
+            document.getElementById('notMyTurnMsg').classList.toggle('hidden', isMyTurn);
+
+            const eCount = data.emergencyVotes ? data.emergencyVotes.length : 0;
+            const req = Math.ceil(total * 0.6);
+            document.getElementById('emergencyCount').textContent = `${eCount}/${req}`;
+            const btnEm = document.getElementById('btnEmergency');
+            if (data.emergencyVotes && data.emergencyVotes.includes(currentUser.uid)) {
+                btnEm.classList.add('bg-red-600', 'text-white', 'border-transparent');
+                btnEm.classList.remove('emergency-active', 'text-red-500', 'bg-red-900/20');
+                btnEm.innerHTML = '<span class="font-bold text-sm">ZASTAVENO</span>';
+            } else {
+                btnEm.classList.add('emergency-active');
             }
-            
-            currentEditingItems.forEach((item, index) => {
-                const div = document.createElement('div');
-                div.className = "bg-gray-900 p-3 rounded border border-gray-600 space-y-2";
-                div.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <span class="text-gray-500 font-mono w-6 text-right">${index + 1}.</span>
-                        <img src="${item.image}" class="w-12 h-12 rounded-full object-cover bg-gray-700" onerror="this.src='https://via.placeholder.com/48'">
-                        <div class="flex-1 space-y-1">
-                            <input type="text" data-index="${index}" data-field="name" value="${item.name}" 
-                                class="w-full p-2 bg-gray-800 rounded border border-gray-600 text-white font-bold text-sm focus:border-blue-500 focus:outline-none">
-                            <input type="text" data-index="${index}" data-field="image" value="${item.image}" 
-                                class="w-full p-2 bg-gray-800 rounded border border-gray-600 text-gray-300 text-xs font-mono focus:border-blue-500 focus:outline-none">
-                        </div>
-                        <button data-index="${index}" class="delete-item-btn bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-2 rounded transition">
-                            🗑️
-                        </button>
-                    </div>
-                `;
-                editItemsList.appendChild(div);
+
+            // Check if emergency meeting threshold is met (any client can trigger, but only if threshold is met)
+            // This ensures it works even if host's client is slow or inactive
+            checkEmergencyThreshold(data).catch(err => console.error('Emergency check error:', err));
+        }
+
+        function renderVoting(data) { renderView('tpl-voting', () => updateVoting(data)); }
+        function updateVoting(data) {
+            const list = document.getElementById('votingList');
+            list.innerHTML = '';
+            const myVote = data.votes ? data.votes[currentUser.uid] : null;
+            document.getElementById('voteStatus').textContent = myVote ? "Hlas uložen." : "Označ podezřelého.";
+
+            data.players.forEach(p => {
+                if (p.uid === currentUser.uid) return;
+                const btn = document.createElement('button');
+                btn.className = `w-full p-4 rounded-xl font-bold border-2 flex justify-between items-center transition-all ${myVote === p.uid ? 'bg-red-600 border-red-500 text-white' : 'bg-gray-800 border-gray-600 text-gray-300'}`;
+                btn.innerHTML = `<span>${p.name}</span>${myVote === p.uid ? '👈' : ''}`;
+                btn.disabled = !!myVote;
+                btn.onclick = async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), { [`votes.${currentUser.uid}`]: p.uid });
+                list.appendChild(btn);
             });
-            
-            // Add event listeners for inputs
-            editItemsList.querySelectorAll('input').forEach(input => {
-                input.addEventListener('input', (e) => {
-                    const index = parseInt(e.target.dataset.index);
-                    const field = e.target.dataset.field;
-                    currentEditingItems[index][field] = e.target.value;
-                });
-            });
-            
-            // Add event listeners for delete buttons
-            editItemsList.querySelectorAll('.delete-item-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const index = parseInt(e.target.dataset.index);
-                    currentEditingItems.splice(index, 1);
-                    renderEditItems();
-                });
+
+            if (data.hostId === currentUser.uid && data.votes && Object.keys(data.votes).length === data.players.length) {
+                const counts = {};
+                Object.values(data.votes).forEach(u => counts[u] = (counts[u]||0)+1);
+                let max = 0, susp = null;
+                for(const [u,c] of Object.entries(counts)) { if(c > max) { max=c; susp=u; } else if(c===max) susp=null; }
+                const win = (susp === data.impostorUid) ? 'CREWMATES' : 'IMPOSTOR';
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), { status: 'RESULTS', winner: win });
+            }
+        }
+
+        function renderResults(data) {
+            renderView('tpl-results', () => {
+                const impName = data.players.find(p => p.uid === data.impostorUid)?.name;
+                document.getElementById('revealImpostorName').textContent = impName;
+                document.getElementById('revealSecretWord').textContent = data.secretItem.name;
+                const title = document.getElementById('winTitle');
+                if (data.winner === 'CREWMATES') {
+                    title.textContent = "AGENTI VYHRÁLI";
+                    title.className = "text-5xl font-black mb-6 uppercase tracking-tighter text-center text-green-500 drop-shadow-lg";
+                } else {
+                    title.textContent = "IMPOSTOR VYHRÁL";
+                    title.className = "text-5xl font-black mb-6 uppercase tracking-tighter text-center text-red-500 drop-shadow-lg";
+                }
+
+                // RESTART LOGIC
+                const isHost = data.hostId === currentUser.uid;
+                const hostControls = document.getElementById('hostResultControls');
+                const playerWaiting = document.getElementById('playerResultWaiting');
+
+                if (isHost) {
+                    hostControls.classList.remove('hidden');
+                    playerWaiting.classList.add('hidden');
+
+                    // 1. RESTART (Keep Players, Reset Game)
+                    document.getElementById('btnPlayAgain').onclick = async () => {
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
+                            status: 'LOBBY',
+                            readyPlayers: [], votes: {}, emergencyVotes: [], chatMessages: [], currentTurnIndex: 0
+                        });
+                    };
+
+                    // 2. EXIT (Kill Room)
+                    document.getElementById('btnExitGame').onclick = async () => {
+                         if(confirm("Opravdu zrušit hru?")) {
+                             await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId));
+                             location.reload();
+                         }
+                    };
+                } else {
+                    hostControls.classList.add('hidden');
+                    playerWaiting.classList.remove('hidden');
+                    document.getElementById('btnPlayerExit').onclick = () => location.reload();
+                }
             });
         }
 
-        // --- ADD NEW ITEM ---
-        function addNewItem() {
-            currentEditingItems.push({ name: '', image: '' });
-            renderEditItems();
-            // Scroll to bottom
-            setTimeout(() => {
-                editItemsList.scrollTop = editItemsList.scrollHeight;
-            }, 100);
+        function updateCurrentView(data) {
+            switch(data.status) {
+                case 'LOBBY': updateLobby(data); break;
+                case 'REVEAL': updateReveal(data); break;
+                case 'DISCUSSION': updateDiscussion(data); break;
+                case 'VOTING': updateVoting(data); break;
+            }
         }
-
-        // --- SAVE SET ---
-        btnSaveSet.addEventListener('click', async () => {
-            const title = editSetTitle.value.trim();
-            if (!title) {
-                editStatus.textContent = "❌ Zadej název setu!";
-                editStatus.className = "mt-4 text-center font-bold text-red-500";
-                r
+    </script>
+</body>
+</html>
