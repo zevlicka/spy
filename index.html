@@ -358,6 +358,186 @@
                             opt.textContent = d.data().title;
                             setSel.appendChild(opt);
                         });
+                        setSel.selectedIndink-0">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Tajný Cíl</p>
+                            <p id="secretName" class="text-2xl font-black text-white leading-none truncate">...</p>
+                        </div>
+                        <div class="flex-1 relative w-full h-full p-2">
+                             <img id="secretImage" src="" referrerpolicy="no-referrer" class="w-full h-full object-contain rounded-lg" alt="Tajný cíl" onerror="this.onerror=null; this.src='https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png';">
+                        </div>
+                    </div>
+
+                    <button id="crewmateConfirmBtn" class="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-white shadow-lg uppercase tracking-wider shrink-0">
+                        Mám to, pokračovat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 4. DISCUSSION -->
+    <template id="tpl-discussion">
+        <div class="flex flex-col h-full p-3 bg-gray-900">
+            <!-- Info Bar -->
+            <div class="flex justify-between items-center bg-gray-800 p-2.5 rounded-xl border border-gray-700 mb-2 shrink-0 shadow-md">
+                <div>
+                    <span class="text-[9px] text-gray-500 uppercase font-bold block">Kolo</span>
+                    <span id="roundIndicator" class="text-lg font-bold text-white">1/3</span>
+                </div>
+                <div class="text-right flex flex-col items-end w-2/3">
+                    <span class="text-[9px] text-gray-500 uppercase font-bold block">Na tahu</span>
+                    <span id="currentTurnPlayer" class="text-yellow-400 font-bold truncate w-full text-right text-lg">...</span>
+                </div>
+            </div>
+
+            <!-- Chat -->
+            <div id="chatContainer" class="flex-grow bg-gray-800/30 rounded-xl p-3 overflow-y-auto flex flex-col mb-2 border border-gray-700/50"></div>
+
+            <!-- Emergency -->
+            <button id="btnEmergency" class="w-full py-3 rounded-xl mb-2 flex items-center justify-center gap-3 font-bold bg-red-900/20 text-red-500 border border-red-900/50 shrink-0 transition-colors">
+                <span class="text-xl">🚨</span>
+                <div class="flex flex-col items-start leading-none">
+                    <span class="text-xs uppercase font-black">Emergency Meeting</span>
+                    <span id="emergencyCount" class="text-[9px] font-normal opacity-70">0/0</span>
+                </div>
+            </button>
+
+            <!-- Input -->
+            <div class="shrink-0 relative">
+                <div id="notMyTurnMsg" class="absolute inset-0 bg-gray-800/95 rounded-xl flex items-center justify-center text-gray-500 text-xs font-bold border border-gray-700 border-dashed z-10 backdrop-blur-sm">
+                    Čekej na svůj tah...
+                </div>
+                <form id="chatForm" class="flex gap-2 h-[56px]">
+                    <input type="text" id="chatInput" class="flex-1 p-3 rounded-xl bg-gray-700 border border-gray-600 text-white font-bold outline-none focus:border-blue-500 placeholder-gray-500" placeholder="Max 3 slova...">
+                    <button type="submit" class="w-[56px] bg-blue-600 rounded-xl font-bold text-xl flex items-center justify-center hover:bg-blue-500 text-white shadow-lg">➤</button>
+                </form>
+                <p id="wordCountError" class="hidden absolute -top-8 left-0 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg">⚠️ Max 3 slova!</p>
+            </div>
+        </div>
+    </template>
+
+    <!-- 5. VOTING -->
+    <template id="tpl-voting">
+        <div class="flex flex-col h-full p-4 pt-8 bg-gray-900">
+            <h2 class="text-4xl font-black text-red-600 uppercase tracking-tighter text-center mb-1 shrink-0 drop-shadow-lg">KDO JE SPY?</h2>
+            <p class="text-center text-gray-400 text-xs mb-6 shrink-0 uppercase tracking-wider">Označ podezřelého</p>
+            
+            <div id="votingList" class="flex-grow overflow-y-auto space-y-3 pr-1 pb-4"></div>
+            
+            <div id="voteStatus" class="mt-2 text-center text-gray-600 font-mono text-[10px] shrink-0 uppercase">Čekání na hlasy...</div>
+        </div>
+    </template>
+
+    <!-- 6. RESULTS -->
+    <template id="tpl-results">
+        <div class="flex flex-col h-full justify-center items-center p-6 bg-gray-900">
+            <h1 id="winTitle" class="text-5xl font-black mb-8 uppercase tracking-tighter text-center drop-shadow-2xl">???</h1>
+            
+            <div class="bg-gray-800 w-full rounded-3xl border border-gray-700 overflow-hidden shadow-2xl mb-8">
+                <div class="p-6 text-center border-b border-gray-700 bg-gray-800/50">
+                    <p class="text-gray-500 uppercase text-[10px] font-bold tracking-widest mb-3">Impostor byl</p>
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center text-4xl shadow-lg border-4 border-gray-700">🤫</div>
+                        <span id="revealImpostorName" class="text-3xl font-black text-white"></span>
+                    </div>
+                </div>
+
+                <div class="p-6 text-center bg-green-900/10">
+                    <p class="text-gray-500 uppercase text-[10px] font-bold tracking-widest mb-2">Tajné slovo</p>
+                    <p id="revealSecretWord" class="text-3xl font-black text-green-400 tracking-wide leading-tight"></p>
+                </div>
+            </div>
+
+            <!-- Host Actions -->
+            <div id="hostResultControls" class="w-full space-y-3 hidden">
+                <button id="btnPlayAgain" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(34,197,94,0.4)] border border-green-500 active:scale-95 transition-all text-lg uppercase tracking-tight">
+                    🔄 Hrát znovu (Reset)
+                </button>
+                <button id="btnExitGame" class="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-xl font-bold text-gray-300 text-sm">
+                    Ukončit hru
+                </button>
+            </div>
+            
+            <!-- Player Waiting -->
+            <div id="playerResultWaiting" class="text-center space-y-4">
+                <div class="loader mx-auto border-gray-600 border-t-green-500"></div>
+                <p class="text-gray-400 font-bold text-sm uppercase">Čekání na hostitele...</p>
+                <button id="btnPlayerExit" class="text-gray-600 underline text-xs mt-4">Odejít do menu</button>
+            </div>
+
+        </div>
+    </template>
+
+    <!-- LOGIKA APLIKACE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, arrayUnion, getDoc, getDocs, addDoc, query, where, deleteDoc, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyArCoQVExlvIhzU6Hc8ffiwbNL55VWHi34",
+            authDomain: "spygame-87b8b.firebaseapp.com",
+            projectId: "spygame-87b8b",
+            storageBucket: "spygame-87b8b.firebasestorage.app",
+            messagingSenderId: "151689614342",
+            appId: "1:151689614342:web:d561337f3083efaf0e9f87",
+            measurementId: "G-ZWD05TCV8Q"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'spygame-87b8b';
+
+        let currentUser = null;
+        let currentGameId = null;
+        let unsubscribeGame = null;
+        let unsubscribeLobbyList = null;
+        const SILHOUETTE_URL = "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png";
+
+        const container = document.getElementById('viewContent');
+        const overlay = document.getElementById('loadingOverlay');
+
+        function renderView(templateId, callback) {
+            container.innerHTML = '';
+            const tpl = document.getElementById(templateId);
+            const clone = tpl.content.cloneNode(true);
+            container.appendChild(clone);
+            if (callback) callback();
+        }
+
+        function showLoading(show) { overlay.classList.toggle('hidden', !show); }
+
+        // --- AUTH ---
+        showLoading(true);
+        signInAnonymously(auth).catch(e => console.error(e));
+        
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                renderMenu();
+                showLoading(false);
+            }
+        });
+
+        // --- 1. MENU ---
+        function renderMenu() {
+            renderView('tpl-menu', () => {
+                const nameInp = document.getElementById('playerNameInput');
+                const setSel = document.getElementById('cardSetSelect');
+                const lobbyList = document.getElementById('activeLobbiesList');
+
+                // Load Sets
+                getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'cardSets')).then(snap => {
+                    setSel.innerHTML = '';
+                    if (snap.empty) setSel.innerHTML = '<option disabled>Žádné sety</option>';
+                    else {
+                        snap.forEach(d => {
+                            const opt = document.createElement('option');
+                            opt.value = d.id;
+                            opt.textContent = d.data().title;
+                            setSel.appendChild(opt);
+                        });
                         setSel.selectedInd        <div id="loadingOverlay" class="absolute inset-0 bg-gray-900 z-[100] flex flex-col items-center justify-center">
             <div class="loader mb-4"></div>
             <p class="text-gray-400 font-bold tracking-widest text-sm">PŘIPOJOVÁNÍ...</p>
