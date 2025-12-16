@@ -71,9 +71,25 @@
             </div>
             
             <div class="px-6 space-y-3 shrink-0">
-                <input type="text" id="playerNameInput" class="w-full p-3 rounded-xl bg-gray-800 border border-gray-700 focus:border-red-500 outline-none text-center text-lg font-bold text-white placeholder-gray-600 transition-all" placeholder="Tvoje Přezdívka">
+                <div class="bg-gray-900 p-2 rounded-xl border border-gray-700 flex flex-col mb-1.5">
+                    <label class="text-[10px] font-bold text-gray-500 ml-1 mb-1 uppercase">Základní přezdívka (povinné)</label>
+                    <select id="baseNameSelect" class="w-full bg-gray-800 text-white font-bold outline-none text-sm p-2 rounded-xl border border-gray-700">
+                        <option value="" disabled selected>Vyber jméno...</option>
+                        <option value="Alex">Alex</option>
+                        <option value="Vojta">Vojta</option>
+                        <option value="Martin">Martin</option>
+                        <option value="Kuba Sl.">Kuba Sl.</option>
+                        <option value="Kuba St.">Kuba St.</option>
+                        <option value="Honza">Honza</option>
+                        <option value="Štěpán">Štěpán</option>
+                        <option value="Vláďa">Vláďa</option>
+                        <option value="David">David</option>
+                    </select>
+                </div>
+
+                <input type="text" id="customNameInput" class="w-full p-3 rounded-xl bg-gray-800 border border-gray-700 focus:border-red-500 outline-none text-center text-sm font-bold text-white placeholder-gray-600 transition-all" placeholder="Vlastní přezdívka (volitelné)">
                 
-                <div class="bg-gray-900 p-2 rounded-xl border border-gray-700 flex flex-col">
+                <div class="bg-gray-900 p-2 rounded-xl border border-gray-700 flex flex-col mt-1">
                     <label class="text-[10px] font-bold text-gray-500 ml-1 mb-1 uppercase">Sada Karet</label>
                     <select id="cardSetSelect" class="w-full bg-transparent text-white font-bold outline-none text-sm p-1">
                         <option value="" disabled selected>Načítám...</option>
@@ -113,6 +129,9 @@
                 <p class="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1">Kód místnosti</p>
                 <div id="displayGameCode" class="text-5xl font-mono font-black text-white tracking-widest select-all">????</div>
                 <div id="selectedSetName" class="text-[10px] text-blue-400 font-bold uppercase mt-1 tracking-wide">...</div>
+                <div class="mt-3 text-[10px] text-gray-400 font-bold uppercase tracking-wide">
+                    Čas na tah: <span id="turnDurationLabel">--</span>
+                </div>
             </div>
 
             <div class="flex justify-between items-end mb-2 px-2">
@@ -122,7 +141,21 @@
             
             <ul id="playersList" class="bg-gray-900/50 rounded-2xl p-2 space-y-1.5 flex-grow overflow-y-auto border border-gray-700 shadow-inner"></ul>
 
-            <div class="mt-4 shrink-0">
+            <div class="mt-4 shrink-0 space-y-3">
+                <div id="hostSettings" class="hidden bg-gray-900/70 rounded-2xl border border-gray-700 p-3 space-y-2">
+                    <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wide text-left mb-1">
+                        Nastavení hry (jen host)
+                    </div>
+                    <div class="flex flex-col gap-1 text-left">
+                        <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wide">Set karet</label>
+                        <select id="lobbyCardSetSelect" class="w-full bg-gray-800 text-white text-sm font-bold rounded-xl px-2 py-1 border border-gray-700 outline-none"></select>
+                    </div>
+                    <div class="flex flex-col gap-1 text-left">
+                        <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wide">Délka tahu (s)</label>
+                        <input id="turnDurationInput" type="number" min="5" max="120" class="w-full bg-gray-800 text-white text-sm font-bold rounded-xl px-2 py-1 border border-gray-700 outline-none text-center">
+                    </div>
+                </div>
+
                 <div id="hostControls" class="hidden">
                     <button id="btnStartGame" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-xl font-bold text-xl shadow-lg animate-pulse transition-all active:scale-95">
                         SPUSTIT HRU
@@ -207,6 +240,10 @@
                 <div class="text-right flex flex-col items-end w-2/3">
                     <span class="text-[9px] text-gray-500 uppercase font-bold block">Na tahu</span>
                     <span id="currentTurnPlayer" class="text-yellow-400 font-bold truncate w-full text-right text-lg">...</span>
+                </div>
+                <div class="flex flex-col items-end ml-2">
+                    <span class="text-[9px] text-gray-500 uppercase font-bold block">Čas</span>
+                    <span id="turnTimer" class="text-lg font-bold text-blue-400">--</span>
                 </div>
             </div>
 
@@ -318,7 +355,18 @@
         const container = document.getElementById('viewContent');
         const overlay = document.getElementById('loadingOverlay');
 
+        // GLOBAL STATE HELPERS
+        let latestGameData = null;
+        let latestDiscussionData = null;
+        let discussionInterval = null;
+
         function renderView(templateId, callback) {
+            // Clear discussion timer when leaving discussion view
+            if (templateId !== 'tpl-discussion' && discussionInterval) {
+                clearInterval(discussionInterval);
+                discussionInterval = null;
+                latestDiscussionData = null;
+            }
             container.innerHTML = '';
             const tpl = document.getElementById(templateId);
             const clone = tpl.content.cloneNode(true);
@@ -343,9 +391,20 @@
         // --- 1. MENU ---
         function renderMenu() {
             renderView('tpl-menu', () => {
-                const nameInp = document.getElementById('playerNameInput');
+                const baseNameSel = document.getElementById('baseNameSelect');
+                const customNameInp = document.getElementById('customNameInput');
                 const setSel = document.getElementById('cardSetSelect');
                 const lobbyList = document.getElementById('activeLobbiesList');
+
+                function buildPlayerName() {
+                    const base = baseNameSel.value;
+                    const custom = customNameInp.value.trim();
+                    if (!base) {
+                        alert("Vyber si základní přezdívku.");
+                        return null;
+                    }
+                    return custom ? `${custom} (${base})` : base;
+                }
 
                 // Load Sets
                 getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'cardSets')).then(snap => {
@@ -358,8 +417,8 @@
                             opt.textContent = d.data().title;
                             setSel.appendChild(opt);
                         });
-
-                                                                    }
+                        setSel.selectedIndex = 0;
+                    }
                 });
 
                 // LIVE LOBBY LISTENER
@@ -371,7 +430,8 @@
                     const lobbies = [];
                     snap.forEach(doc => {
                         const d = doc.data();
-                        if (d.status === "LOBBY") {
+                        // Zobraz všechny hry kromě těch, které už skončily (RESULTS může host zrušit)
+                        if (d.status !== "RESULTS") {
                             lobbies.push({ id: doc.id, ...d });
                         }
                     });
@@ -380,16 +440,17 @@
                         lobbyList.innerHTML = '<div class="text-center text-gray-700 text-xs py-4">Žádné aktivní hry</div>';
                     } else {
                         lobbies.forEach(d => {
-                             const code = d.id;
+                            const code = d.id;
                             const players = d.players ? d.players.length : 0;
                             const hostName = d.players && d.players.length > 0 ? d.players[0].name : "Neznámý";
+                            const statusText = d.status === "LOBBY" ? "Lobby" : (d.status === "REVEAL" ? "Rozdávání rolí" : (d.status === "DISCUSSION" ? "Diskuze" : (d.status === "VOTING" ? "Hlasování" : d.status)));
                             
                             const item = document.createElement('div');
                             item.className = "bg-gray-800 p-3 rounded-xl border border-gray-700 flex justify-between items-center";
                             item.innerHTML = `
                                 <div>
                                     <div class="font-bold text-sm text-white">${code} <span class="text-gray-500 font-normal">(${hostName})</span></div>
-                                    <div class="text-[10px] text-gray-500 uppercase">${d.cardSetName || "Neznámý set"} • ${players} hráčů</div>
+                                    <div class="text-[10px] text-gray-500 uppercase">${d.cardSetName || "Neznámý set"} • ${players} hráčů • ${statusText}</div>
                                 </div>
                                 <button class="bg-blue-600 text-xs px-3 py-1.5 rounded-lg font-bold hover:bg-blue-500 text-white">PŘIPOJIT</button>
                             `;
@@ -404,7 +465,7 @@
 
                 // Create Logic
                 document.getElementById('btnCreateGame').onclick = async () => {
-                    const name = nameInp.value.trim();
+                    const name = buildPlayerName();
                     const setId = setSel.value;
                     if(!name || !setId) return alert("Vyplň jméno a vyber karty!");
                     showLoading(true);
@@ -414,9 +475,16 @@
                     const gamesRef = collection(db, 'artifacts', appId, 'public', 'data', 'games');
                     const allGamesSnap = await getDocs(gamesRef);
                     let allGames = [];
-                    allGamesSnap.forEach(doc => allGames.push({id: doc.id, ...doc.data()}));
+                    allGamesSnap.forEach(docSnap => allGames.push({id: docSnap.id, ...docSnap.data()}));
                     allGames.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+                    // Smazat všechny staré hry se stejnou přezdívkou zakladatele
+                    const sameNameGames = allGames.filter(g => Array.isArray(g.players) && g.players.length > 0 && g.players[0].name === name);
+                    for (const g of sameNameGames) {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', g.id));
+                    }
                     
+                    // Ponechat max 5 nejnovějších her v systému (globální limit)
                     if(allGames.length >= 5) {
                         const toDelete = allGames.slice(4);
                         for(const g of toDelete) {
@@ -427,16 +495,27 @@
                     const code = Math.random().toString(36).substr(2,4).toUpperCase();
                     const setName = setSel.options[setSel.selectedIndex].text;
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', code), {
-                        hostId: currentUser.uid, status: 'LOBBY', cardSetId: setId, cardSetName: setName, createdAt: new Date().toISOString(),
+                        hostId: currentUser.uid,
+                        status: 'LOBBY',
+                        cardSetId: setId,
+                        cardSetName: setName,
+                        createdAt: new Date().toISOString(),
                         players: [{ uid: currentUser.uid, name: name, isHost: true }],
-                        readyPlayers: [], turnOrder: [], chatMessages: [], currentTurnIndex: 0, votes: {}, emergencyVotes: [], usedItems: []
+                        readyPlayers: [],
+                        turnOrder: [],
+                        chatMessages: [],
+                        currentTurnIndex: 0,
+                        votes: {},
+                        emergencyVotes: [],
+                        usedItems: [],
+                        turnDuration: 30
                     });
                     joinGame(code);
                 };
 
                 // Join Logic
                 document.getElementById('btnJoinGame').onclick = async () => {
-                    const name = nameInp.value.trim();
+                    const name = buildPlayerName();
                     const code = document.getElementById('gameCodeInput').value.trim().toUpperCase();
                     if(!name || code.length !== 4) return alert("Chyba údajů!");
                     showLoading(true);
@@ -446,8 +525,9 @@
                     if(!snap.exists()) { showLoading(false); return alert("Hra neexistuje"); }
                     const d = snap.data();
                     if(!d.players.find(p => p.uid === currentUser.uid)) {
-                        if(d.status !== 'LOBBY') { showLoading(false); return alert("Hra už běží"); }
-                        await updateDoc(ref, { players: arrayUnion({ uid: currentUser.uid, name: name, isHost: false }) });
+                        // Pokud se připojuji do rozběhlé hry (mimo LOBBY), budu spectator do příští hry
+                        const isSpectator = d.status !== 'LOBBY';
+                        await updateDoc(ref, { players: arrayUnion({ uid: currentUser.uid, name: name, isHost: false, isSpectator }) });
                     }
                     joinGame(code);
                 };
@@ -470,6 +550,7 @@
             unsubscribeGame = onSnapshot(ref, (snap) => {
                 if(!snap.exists()) { location.reload(); return; }
                 const data = snap.data();
+                latestGameData = { ...data };
                 showLoading(false);
 
                 const currentView = container.getAttribute('data-view');
@@ -489,7 +570,31 @@
         }
 
         // --- RENDERERS ---
-        function renderLobby(data) { renderView('tpl-lobby', () => updateLobby(data)); }
+        function renderLobby(data) { 
+            renderView('tpl-lobby', async () => {
+                // Init lobby card set select & turn duration input
+                const setSelect = document.getElementById('lobbyCardSetSelect');
+                const turnInput = document.getElementById('turnDurationInput');
+                const turnLabel = document.getElementById('turnDurationLabel');
+
+                try {
+                    const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'cardSets'));
+                    setSelect.innerHTML = '';
+                    snap.forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value = d.id;
+                        opt.textContent = d.data().title;
+                        setSelect.appendChild(opt);
+                    });
+                } catch (e) {
+                    console.error('Card sets load error in lobby:', e);
+                }
+
+                // Handlers will be wired in updateLobby where we know if we are host
+                updateLobby(data);
+            }); 
+        }
+
         function updateLobby(data) {
             document.getElementById('displayGameCode').textContent = currentGameId;
             document.getElementById('playerCountBadge').textContent = data.players.length;
@@ -506,6 +611,56 @@
             const amHost = data.hostId === currentUser.uid;
             document.getElementById('hostControls').classList.toggle('hidden', !amHost);
             document.getElementById('waitingForHost').classList.toggle('hidden', amHost);
+
+            // Turn duration & card set controls
+            const hostSettings = document.getElementById('hostSettings');
+            const turnInput = document.getElementById('turnDurationInput');
+            const turnLabel = document.getElementById('turnDurationLabel');
+            const setSelect = document.getElementById('lobbyCardSetSelect');
+
+            const effectiveTurnDuration = data.turnDuration || 30;
+            if (turnLabel) turnLabel.textContent = `${effectiveTurnDuration}s`;
+
+            if (hostSettings) hostSettings.classList.toggle('hidden', !amHost);
+
+            if (turnInput && !turnInput.dataset.bound) {
+                turnInput.dataset.bound = "1";
+                turnInput.addEventListener('change', async () => {
+                    const v = parseInt(turnInput.value, 10);
+                    if (isNaN(v) || v <= 0) return;
+                    try {
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
+                            turnDuration: v
+                        });
+                    } catch (e) {
+                        console.error('Turn duration update error:', e);
+                    }
+                });
+            }
+            if (turnInput && !isNaN(effectiveTurnDuration)) {
+                turnInput.value = effectiveTurnDuration;
+            }
+
+            if (setSelect && !setSelect.dataset.bound) {
+                setSelect.dataset.bound = "1";
+                setSelect.addEventListener('change', async () => {
+                    const setId = setSelect.value;
+                    const setName = setSelect.options[setSelect.selectedIndex]?.text || '';
+                    try {
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
+                            cardSetId: setId,
+                            cardSetName: setName,
+                            usedItems: [] // reset used items when changing set
+                        });
+                    } catch (e) {
+                        console.error('Card set change error:', e);
+                    }
+                });
+            }
+            if (setSelect && data.cardSetId) {
+                setSelect.value = data.cardSetId;
+            }
+
             if (amHost) {
                 document.getElementById('btnStartGame').onclick = async () => {
                     if (data.players.length < 2) return alert("Min 2 hráči");
@@ -531,9 +686,18 @@
                             ? [...usedItems, item] 
                             : [item];
                         
-                        const imp = data.players[Math.floor(Math.random() * data.players.length)];
+                        // impostora volíme jen z hráčů, kteří nejsou spectator
+                        const activePlayers = data.players.filter(p => !p.isSpectator);
+                        const pool = activePlayers.length > 0 ? activePlayers : data.players;
+                        const imp = pool[Math.floor(Math.random() * pool.length)];
                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
-                            status: 'REVEAL', secretItem: item, impostorUid: imp.uid, readyPlayers: [], votes: {}, emergencyVotes: [], usedItems: newUsedItems
+                            status: 'REVEAL',
+                            secretItem: item,
+                            impostorUid: imp.uid,
+                            readyPlayers: [],
+                            votes: {},
+                            emergencyVotes: [],
+                            usedItems: newUsedItems
                         });
                     } catch(e) { console.error(e); showLoading(false); }
                 };
@@ -571,7 +735,7 @@
             }
 
             // Reveal Button
-            document.getElementById('btnReveal').onclick = () => {
+                document.getElementById('btnReveal').onclick = () => {
                 overlayReveal.classList.add('hidden');
                 if (isImp) {
                     impView.classList.remove('hidden');
@@ -603,9 +767,14 @@
             document.getElementById('impostorConfirmBtn').onclick = confirmAction;
 
             if (data.hostId === currentUser.uid && data.readyPlayers && data.readyPlayers.length === data.players.length) {
-                const order = data.players.map(p => p.uid).sort(() => Math.random() - 0.5);
+                const activePlayers = data.players.filter(p => !p.isSpectator);
+                const order = activePlayers.map(p => p.uid).sort(() => Math.random() - 0.5);
+                const duration = data.turnDuration || 30;
                 updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
-                    status: 'DISCUSSION', turnOrder: order, currentTurnIndex: 0
+                    status: 'DISCUSSION',
+                    turnOrder: order,
+                    currentTurnIndex: 0,
+                    turnExpiresAt: Date.now() + duration * 1000
                 });
             }
         }
@@ -614,12 +783,13 @@
         async function checkEmergencyThreshold(gameData) {
             if (!gameData || gameData.status !== 'DISCUSSION') return false;
             
-            const total = gameData.players.length;
+            const activePlayers = (gameData.players || []).filter(p => !p.isSpectator);
+            const total = activePlayers.length || (gameData.players ? gameData.players.length : 0);
             const eCount = gameData.emergencyVotes ? gameData.emergencyVotes.length : 0;
-            const req = Math.ceil(total * 0.6);
+            const req = total > 0 ? Math.ceil(total * 0.6) : 0;
             const turn = gameData.currentTurnIndex || 0;
             
-            if (eCount >= req || turn >= total * 3) {
+            if (req > 0 && (eCount >= req || turn >= total * 3)) {
                 // Get fresh data to prevent race conditions
                 const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
                 try {
@@ -628,10 +798,12 @@
                         const freshData = freshSnap.data();
                         // Only transition if still in DISCUSSION and threshold still met
                         if (freshData.status === 'DISCUSSION') {
+                            const freshActive = (freshData.players || []).filter(p => !p.isSpectator);
+                            const freshTotal = freshActive.length || (freshData.players ? freshData.players.length : 0);
                             const freshCount = freshData.emergencyVotes ? freshData.emergencyVotes.length : 0;
-                            const freshReq = Math.ceil(freshData.players.length * 0.6);
+                            const freshReq = freshTotal > 0 ? Math.ceil(freshTotal * 0.6) : 0;
                             const freshTurn = freshData.currentTurnIndex || 0;
-                            if (freshCount >= freshReq || freshTurn >= freshData.players.length * 3) {
+                            if (freshReq > 0 && (freshCount >= freshReq || freshTurn >= freshTotal * 3)) {
                                 await updateDoc(gameRef, { status: 'VOTING' });
                                 return true;
                             }
@@ -644,41 +816,142 @@
             return false;
         }
 
-        function renderDiscussion(data) { renderView('tpl-discussion', () => {
-            document.getElementById('chatForm').onsubmit = async (e) => {
-                e.preventDefault();
-                const inp = document.getElementById('chatInput');
-                const val = inp.value.trim();
-                if(val.split(/\s+/).filter(x=>x).length > 3 || !val) {
-                    const err = document.getElementById('wordCountError'); err.classList.remove('hidden'); setTimeout(()=>err.classList.add('hidden'),2000); return;
+        // Helper: auto skip turn when timer expires (host-side safety)
+        async function checkTurnTimeout(gameData) {
+            if (!gameData || gameData.status !== 'DISCUSSION' || !gameData.turnExpiresAt) return false;
+            const now = Date.now();
+            if (now < gameData.turnExpiresAt) return false;
+
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+            try {
+                const freshSnap = await getDoc(gameRef);
+                if (!freshSnap.exists()) return false;
+                const freshData = freshSnap.data();
+                if (freshData.status !== 'DISCUSSION' || !freshData.turnExpiresAt) return false;
+
+                const now2 = Date.now();
+                if (now2 < freshData.turnExpiresAt) return false;
+
+                // Skip only if we are still on the same turn index (no one poslal zprávu)
+                if (freshData.currentTurnIndex === gameData.currentTurnIndex) {
+                    const duration = freshData.turnDuration || 30;
+                    await updateDoc(gameRef, {
+                        currentTurnIndex: increment(1),
+                        turnExpiresAt: Date.now() + duration * 1000
+                    });
+                    return true;
                 }
-                inp.value = '';
-                // USE INCREMENT FOR TURN SWITCHING
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
-                    chatMessages: arrayUnion({s: currentUser.uid, t: val}), 
-                    currentTurnIndex: increment(1)
-                });
-            };
-            document.getElementById('btnEmergency').onclick = async () => {
-                const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
-                await updateDoc(gameRef, { emergencyVotes: arrayUnion(currentUser.uid) });
-                
-                // Immediately check threshold after voting (any player can trigger if host is slow)
-                const gameSnap = await getDoc(gameRef);
-                if (gameSnap.exists()) {
-                    await checkEmergencyThreshold(gameSnap.data());
+            } catch (err) {
+                console.error('Turn timeout check error:', err);
+            }
+            return false;
+        }
+
+        function renderDiscussion(data) { 
+            renderView('tpl-discussion', () => {
+                latestDiscussionData = data;
+
+                const chatForm = document.getElementById('chatForm');
+                chatForm.onsubmit = async (e) => {
+                    e.preventDefault();
+                    const inp = document.getElementById('chatInput');
+                    const val = inp.value.trim();
+                    if(val.split(/\s+/).filter(x=>x).length > 3 || !val) {
+                        const err = document.getElementById('wordCountError'); 
+                        err.classList.remove('hidden'); 
+                        setTimeout(()=>err.classList.add('hidden'),2000); 
+                        return;
+                    }
+
+                    // Povolit odeslání jen pokud jsem na tahu a nejsem spectator
+                    const gd = latestDiscussionData;
+                    if (!gd) return;
+                    const me = gd.players.find(p => p.uid === currentUser.uid);
+                    if (me && me.isSpectator) {
+                        // spectator v tomto kole jen sleduje
+                        return;
+                    }
+                    const activePlayers = gd.players.filter(p => !p.isSpectator);
+                    const activeTotal = activePlayers.length || 1;
+                    const turn = gd.currentTurnIndex || 0;
+                    const uidTurn = (gd.turnOrder && gd.turnOrder.length > 0)
+                        ? gd.turnOrder[turn % gd.turnOrder.length]
+                        : (activePlayers[turn % activeTotal]?.uid || null);
+                    const isMyTurn = uidTurn === currentUser.uid;
+                    if (!isMyTurn) {
+                        // necháme text v inputu, jen neodešleme
+                        return;
+                    }
+
+                    inp.value = '';
+                    const duration = (gd.turnDuration || 30);
+                    // USE INCREMENT FOR TURN SWITCHING + nastavit nový čas
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
+                        chatMessages: arrayUnion({s: currentUser.uid, t: val}), 
+                        currentTurnIndex: increment(1),
+                        turnExpiresAt: Date.now() + duration * 1000
+                    });
+                };
+
+                document.getElementById('btnEmergency').onclick = async () => {
+                    const gd = latestDiscussionData;
+                    if (!gd) return;
+                    const me = gd.players.find(p => p.uid === currentUser.uid);
+                    if (me && me.isSpectator) {
+                        // spectator nemůže hlasovat pro emergency
+                        return;
+                    }
+                    const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId);
+                    await updateDoc(gameRef, { emergencyVotes: arrayUnion(currentUser.uid) });
+                    
+                    // Immediately check threshold after voting (any player can trigger if host is slow)
+                    const gameSnap = await getDoc(gameRef);
+                    if (gameSnap.exists()) {
+                        await checkEmergencyThreshold(gameSnap.data());
+                    }
+                };
+
+                // Timer UI
+                const timerEl = document.getElementById('turnTimer');
+                if (discussionInterval) {
+                    clearInterval(discussionInterval);
+                    discussionInterval = null;
                 }
-            };
-            updateDiscussion(data);
-        });}
+                discussionInterval = setInterval(() => {
+                    if (!latestDiscussionData || !latestDiscussionData.turnExpiresAt) {
+                        if (timerEl) timerEl.textContent = '--';
+                        return;
+                    }
+                    const now = Date.now();
+                    const msLeft = latestDiscussionData.turnExpiresAt - now;
+                    const secLeft = Math.max(0, Math.ceil(msLeft / 1000));
+                    if (timerEl) timerEl.textContent = `${secLeft}s`;
+
+                    // Host řeší auto-skip, aby se to nespouštělo z každého klienta
+                    if (latestDiscussionData.hostId === currentUser.uid && msLeft <= 0) {
+                        checkTurnTimeout(latestDiscussionData).catch(err => console.error(err));
+                    }
+                }, 1000);
+
+                updateDiscussion(data);
+            });
+        }
 
         function updateDiscussion(data) {
-            const total = data.players.length;
+            latestDiscussionData = data;
+
+            const me = data.players.find(p => p.uid === currentUser.uid);
+            const isSpectator = !!(me && me.isSpectator && data.status !== 'LOBBY');
+
+            const activePlayers = data.players.filter(p => !p.isSpectator);
+            const activeTotal = activePlayers.length || 1;
             const turn = data.currentTurnIndex || 0;
-            const round = Math.floor(turn / total) + 1;
+            const round = Math.floor(turn / activeTotal) + 1;
             document.getElementById('roundIndicator').textContent = `${Math.min(round, 3)}/3`;
             
-            const uidTurn = data.turnOrder ? data.turnOrder[turn % total] : null;
+            const uidTurn = data.turnOrder && data.turnOrder.length > 0
+                ? data.turnOrder[turn % data.turnOrder.length]
+                : (activePlayers[turn % activeTotal]?.uid || null);
             const pTurn = data.players.find(p => p.uid === uidTurn);
             document.getElementById('currentTurnPlayer').textContent = pTurn?.name || "...";
 
@@ -694,19 +967,29 @@
             });
             box.scrollTop = box.scrollHeight;
 
-            const isMyTurn = uidTurn === currentUser.uid;
-            document.getElementById('notMyTurnMsg').classList.toggle('hidden', isMyTurn);
+            const isMyTurn = !isSpectator && uidTurn === currentUser.uid;
+            // Overlay už neblokuje input – necháme ho vždy skrytý, odeslání hlídá logika v JS
+            const notMsg = document.getElementById('notMyTurnMsg');
+            if (notMsg) notMsg.classList.add('hidden');
 
-            const eCount = data.emergencyVotes ? data.emergencyVotes.length : 0;
-            const req = Math.ceil(total * 0.6);
+            const eCount = (data.emergencyVotes || []).filter(uid => {
+                const p = data.players.find(pl => pl.uid === uid);
+                return p && !p.isSpectator;
+            }).length;
+            const req = Math.ceil(activeTotal * 0.6);
             document.getElementById('emergencyCount').textContent = `${eCount}/${req}`;
             const btnEm = document.getElementById('btnEmergency');
-            if (data.emergencyVotes && data.emergencyVotes.includes(currentUser.uid)) {
+            if (data.emergencyVotes && data.emergencyVotes.includes(currentUser.uid) && !isSpectator) {
                 btnEm.classList.add('bg-red-600', 'text-white', 'border-transparent');
                 btnEm.classList.remove('emergency-active', 'text-red-500', 'bg-red-900/20');
                 btnEm.innerHTML = '<span class="font-bold text-sm">ZASTAVENO</span>';
-            } else {
+            } else if (!isSpectator) {
                 btnEm.classList.add('emergency-active');
+            } else {
+                // spectator – jen sleduje, nemá tlačítko aktivní
+                btnEm.classList.remove('emergency-active');
+                btnEm.disabled = true;
+                btnEm.classList.add('opacity-60');
             }
 
             // Check if emergency meeting threshold is met (any client can trigger, but only if threshold is met)
@@ -718,20 +1001,45 @@
         function updateVoting(data) {
             const list = document.getElementById('votingList');
             list.innerHTML = '';
-            const myVote = data.votes ? data.votes[currentUser.uid] : null;
-            document.getElementById('voteStatus').textContent = myVote ? "Hlas uložen." : "Označ podezřelého.";
 
-            data.players.forEach(p => {
+            const me = data.players.find(p => p.uid === currentUser.uid);
+            const isSpectator = !!(me && me.isSpectator && data.status !== 'LOBBY');
+
+            const myVote = data.votes ? data.votes[currentUser.uid] : null;
+            document.getElementById('voteStatus').textContent = myVote ? "Hlas uložen." : (isSpectator ? "V tomto kole jen sleduješ." : "Označ podezřelého.");
+            
+            const voteEntries = data.votes ? Object.entries(data.votes) : [];
+
+            // Hlasovat lze jen o aktivních hráčích (bez spectatorů)
+            const activePlayers = data.players.filter(p => !p.isSpectator);
+
+            activePlayers.forEach(p => {
                 if (p.uid === currentUser.uid) return;
                 const btn = document.createElement('button');
-                btn.className = `w-full p-4 rounded-xl font-bold border-2 flex justify-between items-center transition-all ${myVote === p.uid ? 'bg-red-600 border-red-500 text-white' : 'bg-gray-800 border-gray-600 text-gray-300'}`;
-                btn.innerHTML = `<span>${p.name}</span>${myVote === p.uid ? '👈' : ''}`;
-                btn.disabled = !!myVote;
-                btn.onclick = async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), { [`votes.${currentUser.uid}`]: p.uid });
+                const theirVoters = voteEntries
+                    .filter(([voter, target]) => target === p.uid)
+                    .map(([voter]) => data.players.find(pl => pl.uid === voter)?.name || '?');
+
+                btn.className = `w-full p-4 rounded-xl font-bold border-2 flex flex-col items-start transition-all ${myVote === p.uid ? 'bg-red-600 border-red-500 text-white' : 'bg-gray-800 border-gray-600 text-gray-300'}`;
+                btn.innerHTML = `
+                    <div class="w-full flex justify-between items-center">
+                        <span>${p.name}</span>
+                        <span>${myVote === p.uid ? '👈' : ''}</span>
+                    </div>
+                    <div class="text-[10px] text-gray-300 uppercase mt-1">
+                        ${theirVoters.length} hlasů${theirVoters.length ? ': ' + theirVoters.join(', ') : ''}
+                    </div>
+                `;
+                // spectator v tomto kole nemůže hlasovat
+                btn.disabled = isSpectator || !!myVote;
+                if (!isSpectator) {
+                    btn.onclick = async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), { [`votes.${currentUser.uid}`]: p.uid });
+                }
                 list.appendChild(btn);
             });
 
-            if (data.hostId === currentUser.uid && data.votes && Object.keys(data.votes).length === data.players.length) {
+            // Počet hlasů počítáme jen od hráčů, kteří nejsou spectator
+            if (data.hostId === currentUser.uid && data.votes && Object.keys(data.votes).length === activePlayers.length) {
                 const counts = {};
                 Object.values(data.votes).forEach(u => counts[u] = (counts[u]||0)+1);
                 let max = 0, susp = null;
@@ -766,9 +1074,21 @@
 
                     // 1. RESTART (Keep Players, Reset Game)
                     document.getElementById('btnPlayAgain').onclick = async () => {
+                        // při novém slovu všichni hráči začínají jako aktivní (bez spectator flagu)
+                        const resetPlayers = data.players.map(p => ({
+                            uid: p.uid,
+                            name: p.name,
+                            isHost: p.isHost || false
+                        }));
                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', currentGameId), {
                             status: 'LOBBY',
-                            readyPlayers: [], votes: {}, emergencyVotes: [], chatMessages: [], currentTurnIndex: 0
+                            readyPlayers: [],
+                            votes: {},
+                            emergencyVotes: [],
+                            chatMessages: [],
+                            currentTurnIndex: 0,
+                            turnExpiresAt: null,
+                            players: resetPlayers
                         });
                     };
 
